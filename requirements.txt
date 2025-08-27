@@ -1,0 +1,17 @@
+# Discord
+discord.py>=2.3.2
+
+# Web and HTTP
+aiohttp>=3.8.4
+
+# Template Engine
+jinja2>=3.1.2
+
+# Browser Automation
+playwright>=1.37.0
+
+# Image Processing
+pillow>=10.0.0
+
+# Async Support
+asyncio>=3.4.3

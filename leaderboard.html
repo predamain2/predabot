@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaderboard</title>
+    <style>
+        /* Main styling */
+        body {
+            margin: 0;
+            padding: 0;
+            background: #0c0c0c;
+            color: white;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        }
+
+        /* Container styling */
+        .leaderboard-container {
+            width: 100%;
+            max-width: 900px;
+            margin: 20px auto;
+            background: linear-gradient(180deg, rgba(32,32,32,0.8) 0%, rgba(16,16,16,0.8) 100%);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        /* Header styling */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            background: rgba(0,0,0,0.4);
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 32px;
+            letter-spacing: 2px;
+        }
+
+        .header img {
+            height: 40px;
+        }
+
+        /* Column headers */
+        .column-headers {
+            display: grid;
+            grid-template-columns: 80px 1fr 120px 120px 120px;
+            padding: 12px 20px;
+            background: rgba(255,255,255,0.05);
+            font-weight: 500;
+            text-transform: uppercase;
+            font-size: 14px;
+            letter-spacing: 1px;
+        }
+
+        /* Player rows */
+        .player-row {
+            display: grid;
+            grid-template-columns: 80px 1fr 120px 120px 120px;
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            align-items: center;
+            transition: background-color 0.2s;
+        }
+
+        .player-row:hover {
+            background: rgba(255,255,255,0.02);
+        }
+
+        /* Player ranking */
+        .rank {
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        /* Player name */
+        .player-name {
+            font-weight: 500;
+            font-size: 18px;
+        }
+
+        /* Stats styling */
+        .stat {
+            text-align: center;
+            font-weight: 500;
+        }
+
+        /* Gradient background for rows */
+        .player-row:nth-child(odd) {
+            background: rgba(255,255,255,0.01);
+        }
+
+        /* Image backgrounds */
+        .bg-image {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0.1;
+            z-index: -1;
+        }
+    </style>
+</head>
+<body>
+    <div class="leaderboard-container">
+        <div class="header">
+            <h1>LEADERBOARD</h1>
+            <img src="https://i.imgur.com/mtGPCdG.png" alt="FACEIT">
+        </div>
+        <div class="column-headers">
+            <div>#</div>
+            <div>PLAYER</div>
+            <div>W/R</div>
+            <div>K/D</div>
+            <div>POINTS</div>
+        </div>
+        {% for player in players %}
+        <div class="player-row">
+            <div class="rank">{{ player.rank }}</div>
+            <div class="player-name">{{ player.nick }}</div>
+            <div class="stat">{{ player.winrate }}%</div>
+            <div class="stat">{{ player.kd }}</div>
+            <div class="stat">{{ player.elo }}</div>
+        </div>
+        {% endfor %}
+    </div>
+</body>
+</html>

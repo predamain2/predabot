@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Player Stats</title>
+    <style>
+        /* Main styling */
+        body {
+            margin: 0;
+            padding: 0;
+            background: #0c0c0c;
+            color: white;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Container styling */
+        .stats-container {
+            width: 100%;
+            max-width: 1000px;
+            background: linear-gradient(180deg, rgba(32,32,32,0.8) 0%, rgba(16,16,16,0.8) 100%);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            position: relative;
+        }
+
+        .header h1 {
+            font-size: 48px;
+            margin: 0;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .logo {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            width: 60px;
+        }
+
+        /* Stats grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .stats-column {
+            background: rgba(255,255,255,0.02);
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stats-column:hover {
+            background: rgba(255,255,255,0.04);
+        }
+
+        .stats-heading {
+            font-size: 24px;
+            margin: 0 0 20px 0;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #ffffff;
+            font-weight: 500;
+        }
+
+        .stat-item {
+            margin: 15px 0;
+            position: relative;
+        }
+
+        .stat-item:after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: 10%;
+            right: 10%;
+            height: 1px;
+            background: rgba(255,255,255,0.05);
+        }
+
+        .stat-item:last-child:after {
+            display: none;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.7);
+            margin-bottom: 5px;
+            letter-spacing: 1px;
+            font-weight: 500;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #ffffff;
+            background: rgba(255,255,255,0.05);
+            padding: 5px 15px;
+            border-radius: 4px;
+            display: inline-block;
+            min-width: 80px;
+        }
+
+        /* Header styling */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            background: rgba(0,0,0,0.4);
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 32px;
+            letter-spacing: 2px;
+            font-weight: 500;
+        }
+
+        .logo {
+            height: 40px;
+            position: static;
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Teko:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="stats-container">
+        <div class="header">
+            <h1>PLAYER STATS</h1>
+            <img src="https://i.imgur.com/mtGPCdG.png" alt="AF" class="logo">
+        </div>
+        <div class="stats-grid">
+            <div class="stats-column">
+                <h2 class="stats-heading">GENERAL STATS</h2>
+                <div class="stat-item">
+                    <div class="stat-label">POINTS</div>
+                    <div class="stat-value">{{ stats.points }}</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">TOTAL GAMES</div>
+                    <div class="stat-value">{{ stats.total_games }}</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">WIN RATE</div>
+                    <div class="stat-value">{{ stats.win_rate }}%</div>
+                </div>
+            </div>
+            <div class="stats-column">
+                <h2 class="stats-heading">MATCH</h2>
+                <div class="stat-item">
+                    <div class="stat-label">WINS</div>
+                    <div class="stat-value">{{ stats.wins }}</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">LOSSES</div>
+                    <div class="stat-value">{{ stats.losses }}</div>
+                </div>
+            </div>
+            <div class="stats-column">
+                <h2 class="stats-heading">COMBAT STATS</h2>
+                <div class="stat-item">
+                    <div class="stat-label">KILLS</div>
+                    <div class="stat-value">{{ stats.kills }}</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">DEATHS</div>
+                    <div class="stat-value">{{ stats.deaths }}</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">K/D</div>
+                    <div class="stat-value">{{ stats.kd }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

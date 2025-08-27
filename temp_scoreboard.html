@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Match Details</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Teko:wght@300;400;500;600;700&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Teko', 'Rajdhani', sans-serif;
+            background: radial-gradient(ellipse at center, #1a1a2e 0%, #16213e 50%, #0f0f23 100%);
+            background-attachment: fixed;
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+
+        #match-container {
+            width: 100%;
+            max-width: 1200px; /* Increased width */
+            background: 
+                linear-gradient(135deg, rgba(255,255,255,0.02) 0%, transparent 50%),
+                linear-gradient(225deg, rgba(0,150,255,0.03) 0%, transparent 30%),
+                linear-gradient(315deg, rgba(255,100,0,0.03) 0%, transparent 30%),
+                radial-gradient(circle at 30% 30%, rgba(100,200,255,0.08) 0%, transparent 50%),
+                radial-gradient(circle at 70% 70%, rgba(255,150,100,0.08) 0%, transparent 50%),
+                linear-gradient(145deg, #1e1e3f 0%, #2a2a4a 20%, #1a1a35 50%, #2d2d48 80%, #1b1b36 100%);
+            border: 1px solid rgba(255,255,255,0.08);
+            box-shadow: 
+                0 25px 50px rgba(0,0,0,0.5),
+                0 0 100px rgba(0,100,200,0.1),
+                inset 0 1px 0 rgba(255,255,255,0.05),
+                inset 0 -1px 0 rgba(0,0,0,0.2);
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
+            border-radius: 12px;
+        }
+
+        #match-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, rgba(0,150,255,0.5), rgba(255,100,50,0.5), transparent);
+            animation: shimmer 3s ease-in-out infinite;
+        }
+
+        @keyframes shimmer {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 0.8; }
+        }
+
+        .header {
+            text-align: center;
+            padding: 2rem;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.3), transparent);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+        }
+
+        .match-title {
+            font-size: 3rem;
+            font-weight: 700;
+            color: #ffffff;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            text-shadow: 
+                0 0 20px rgba(255,255,255,0.3),
+                0 5px 15px rgba(0,0,0,0.8);
+            margin: 0;
+            background: linear-gradient(135deg, #ffffff 0%, #e0e8ff 50%, #ffffff 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .match-subtitle {
+            font-size: 1.5rem;
+            color: rgba(255,255,255,0.7);
+            margin-top: 0.5rem;
+        }
+
+        .team-section {
+            padding: 2rem;
+            position: relative;
+        }
+
+        .team-header {
+            font-size: 1.75rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+        }
+
+        .team-ct .team-header {
+            color: #60a5fa;
+        }
+
+        .team-t .team-header {
+            color: #f97316;
+        }
+
+        .player-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        /* Updated Player Item Styles */
+        .player-item {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem 1.5rem; /* Adjusted padding */
+            background: linear-gradient(90deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.1) 100%);
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .player-item:hover {
+            transform: translateX(5px);
+            background: linear-gradient(90deg, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0.2) 100%);
+        }
+
+        .player-name {
+            font-size: 1.5rem; /* Slightly larger font size */
+            font-weight: 500;
+            color: #ffffff;
+            line-height: 1.2;
+        }
+
+    </style>
+</head>
+<body>
+    <div id="match-container">
+        <div class="header">
+            <h1 class="match-title">Match #3</h1>
+            <div class="match-subtitle">Dune</div>
+        </div>
+        
+        <div style="display: flex; flex-wrap: wrap; gap: 0;"> <div class="team-section team-ct" style="flex: 1; min-width: 300px;">
+                <h2 class="team-header">Counter-Terrorists</h2>
+                <ul class="player-list">
+                    
+                    <li class="player-item">
+                        <span class="player-name">faceittest</span>
+                    </li>
+                    
+                    <li class="player-item">
+                        <span class="player-name">d0cctest</span>
+                    </li>
+                    
+                    
+                </ul>
+            </div>
+
+            <div class="team-section team-t" style="flex: 1; min-width: 300px;">
+                <h2 class="team-header">Terrorists</h2>
+                <ul class="player-list">
+                    
+                    <li class="player-item">
+                        <span class="player-name">promethazine</span>
+                    </li>
+                    
+                    
+                </ul>
+            </div>
+
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scoreboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Teko:wght@300;400;500;600;700&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Teko', 'Rajdhani', sans-serif;
+            background: radial-gradient(ellipse at center, #1a1a2e 0%, #16213e 50%, #0f0f23 100%);
+            background-attachment: fixed;
+        }
+
+        #scoreboard-container {
+            background: 
+                linear-gradient(135deg, rgba(255,255,255,0.02) 0%, transparent 50%),
+                linear-gradient(225deg, rgba(0,150,255,0.03) 0%, transparent 30%),
+                linear-gradient(315deg, rgba(255,100,0,0.03) 0%, transparent 30%),
+                radial-gradient(circle at 30% 30%, rgba(100,200,255,0.08) 0%, transparent 50%),
+                radial-gradient(circle at 70% 70%, rgba(255,150,100,0.08) 0%, transparent 50%),
+                linear-gradient(145deg, #1e1e3f 0%, #2a2a4a 20%, #1a1a35 50%, #2d2d48 80%, #1b1b36 100%);
+            border: 1px solid rgba(255,255,255,0.08);
+            box-shadow: 
+                0 25px 50px rgba(0,0,0,0.5),
+                0 0 100px rgba(0,100,200,0.1),
+                inset 0 1px 0 rgba(255,255,255,0.05),
+                inset 0 -1px 0 rgba(0,0,0,0.2);
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        #scoreboard-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, rgba(0,150,255,0.5), rgba(255,100,50,0.5), transparent);
+            animation: shimmer 3s ease-in-out infinite;
+        }
+
+        @keyframes shimmer {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 0.8; }
+        }
+
+        .score-background-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 8rem;
+            font-weight: 300;
+            color: rgba(255, 255, 255, 0.03);
+            letter-spacing: 8px;
+            z-index: 0;
+            user-select: none;
+            font-family: 'Rajdhani', sans-serif;
+        }
+
+        .score-text {
+            position: relative;
+            z-index: 1;
+            text-shadow: 
+                0 0 20px rgba(255,255,255,0.3),
+                0 5px 15px rgba(0,0,0,0.8),
+                0 0 40px rgba(100,200,255,0.2);
+            background: linear-gradient(145deg, #ffffff, #e0e8ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .team-header {
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            font-size: 1.4rem;
+            font-weight: 600;
+            padding: 12px 0;
+            position: relative;
+            overflow: hidden;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+        }
+
+        .team-header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+            animation: slide 4s ease-in-out infinite;
+        }
+
+        @keyframes slide {
+            0% { left: -100%; }
+            50% { left: 100%; }
+            100% { left: 100%; }
+        }
+
+        .team-header-ct {
+            background: linear-gradient(135deg, #2563eb 0%, #1e40af 50%, #1e3a8a 100%);
+            border-bottom: 2px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .team-header-t {
+            background: linear-gradient(135deg, #ea580c 0%, #dc2626 50%, #b91c1c 100%);
+            border-bottom: 2px solid rgba(249, 115, 22, 0.3);
+        }
+
+        .stat-header-grid {
+            display: grid;
+            grid-template-columns: 3rem minmax(100px, 1fr) repeat(4, 4.5rem);
+            gap: 0.75rem;
+            padding: 0.75rem;
+        }
+
+        .stat-header-grid-t {
+            grid-template-columns: repeat(4, 4.5rem) minmax(100px, 1fr) 3rem;
+        }
+
+        .stat-label {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+        }
+
+        .player-row {
+            display: grid;
+            align-items: center;
+            gap: 0.75rem;
+            background: 
+                linear-gradient(135deg, rgba(255,255,255,0.02) 0%, transparent 50%),
+                linear-gradient(90deg, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.4) 100%);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 0.5rem;
+            margin-bottom: 4px;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .player-row::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 20px;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .player-row:hover::before {
+            left: 100%;
+        }
+
+        .player-row:hover {
+            background: 
+                linear-gradient(135deg, rgba(255,255,255,0.05) 0%, transparent 50%),
+                linear-gradient(90deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.5) 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+        }
+
+        .player-row-ct {
+            grid-template-columns: 3rem minmax(100px, 1fr) repeat(4, 4.5rem);
+            border-left: 3px solid rgba(59, 130, 246, 0.4);
+        }
+
+        .player-row-t {
+            grid-template-columns: repeat(4, 4.5rem) minmax(100px, 1fr) 3rem;
+            text-align: right;
+            border-right: 3px solid rgba(249, 115, 22, 0.4);
+        }
+
+        .stat-box {
+            background: 
+                linear-gradient(145deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.6) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            padding: 6px 2px;
+            font-size: 0.95rem;
+            box-shadow: 
+                inset 0 1px 0 rgba(255,255,255,0.05),
+                0 2px 8px rgba(0,0,0,0.3);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-box::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+        }
+
+        .stat-box:hover {
+            background: 
+                linear-gradient(145deg, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.7) 100%);
+            border-color: rgba(255, 255, 255, 0.2);
+            transform: scale(1.05);
+        }
+
+        .elo-circle {
+            width: 3rem;
+            height: 3rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            font-size: 1.1rem;
+            font-weight: 700;
+            position: relative;
+            transition: all 0.3s ease;
+            border: 2px solid rgba(255,255,255,0.1);
+        }
+
+        .elo-circle::before {
+            content: '';
+            position: absolute;
+            inset: -2px;
+            border-radius: 50%;
+            padding: 2px;
+            background: linear-gradient(135deg, rgba(255,255,255,0.2), transparent);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: exclude;
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask-composite: exclude;
+        }
+
+        .elo-positive {
+            background: 
+                radial-gradient(circle at 30% 30%, #22c55e, #16a34a),
+                linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+            box-shadow: 
+                0 0 20px rgba(34, 197, 94, 0.4),
+                0 4px 15px rgba(0,0,0,0.3);
+            color: #ffffff;
+        }
+
+        .elo-negative {
+            background: 
+                radial-gradient(circle at 30% 30%, #ef4444, #dc2626),
+                linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            box-shadow: 
+                0 0 20px rgba(239, 68, 68, 0.4),
+                0 4px 15px rgba(0,0,0,0.3);
+            color: #ffffff;
+        }
+
+        .elo-circle:hover {
+            transform: scale(1.1) rotate(5deg);
+            box-shadow: 
+                0 0 30px rgba(34, 197, 94, 0.6),
+                0 8px 25px rgba(0,0,0,0.4);
+        }
+
+        .player-name {
+            text-shadow: 
+                0 0 10px rgba(255,255,255,0.3),
+                0 2px 8px rgba(0,0,0,0.8);
+            background: linear-gradient(135deg, #ffffff, #f1f5f9);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: 600;
+            letter-spacing: 1px;
+        }
+
+        .match-result-text {
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 6px;
+            transform: skew(-5deg);
+            text-shadow: 
+                0 0 20px rgba(255,255,255,0.3),
+                0 5px 15px rgba(0,0,0,0.8),
+                0 0 40px rgba(100,200,255,0.2);
+            background: linear-gradient(135deg, #fbbf24, #f59e0b, #d97706);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .footer-section {
+            background: 
+                linear-gradient(135deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.6) 100%);
+            border-top: 1px solid rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .map-text {
+            text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+            font-weight: 600;
+            letter-spacing: 2px;
+        }
+
+        .section-divider {
+            position: relative;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+            height: 1px;
+        }
+
+        .background-overlay {
+            position: absolute;
+            inset: 0;
+            background: 
+                radial-gradient(circle at 25% 25%, rgba(59, 130, 246, 0.05) 0%, transparent 50%),
+                radial-gradient(circle at 75% 75%, rgba(249, 115, 22, 0.05) 0%, transparent 50%);
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center min-h-screen p-4">
+    <div id="scoreboard-container" class="rounded-xl shadow-2xl overflow-hidden w-full max-w-[95%]">
+        <div class="background-overlay"></div>
+        
+        <!-- Score Header -->
+        <div class="py-8 text-center relative footer-section">
+            <div class="score-background-text">MATCH</div>
+            <h1 id="match-score" class="text-9xl font-bold score-text">{{ match_data.score }}</h1>
+        </div>
+
+        <!-- Team Headers -->
+        <div class="flex">
+            <div class="w-1/2 text-center text-white team-header team-header-ct">
+                Counter Terrorist
+            </div>
+            <div class="w-1/2 text-center text-white team-header team-header-t">
+                Terrorist
+            </div>
+        </div>
+
+        <!-- Players Section -->
+        <div class="flex relative">
+            <div class="absolute inset-0 flex items-center justify-center text-white text-9xl font-bold opacity-3 z-0 select-none" style="font-family: 'Rajdhani', sans-serif;"></div>
+            
+            <!-- CT Team -->
+            <div class="w-1/2 p-6 z-10">
+                <div class="stat-header-grid mb-3">
+                    <div class="col-start-3 text-center stat-label text-base">Kills</div>
+                    <div class="text-center stat-label text-base">Assists</div>
+                    <div class="text-center stat-label text-base">Deaths</div>
+                    <div class="text-center stat-label text-base">Rating</div>
+                </div>
+                <div id="ct-players" class="w-full space-y-2">
+                    {% for p in match_data.ct_team %}
+                    <div class="player-row player-row-ct">
+                        <div class="elo-circle {{ 'elo-positive' if p.elo_change >= 0 else 'elo-negative' }}">
+                            {{ '+' if p.elo_change >= 0 else '' }}{{ p.elo_change }}
+                        </div>
+                        <div class="text-white font-bold text-2xl player-name">{{ p.name }}</div>
+                        <div class="stat-box text-white text-xl text-center font-semibold">{{ p.kills }}</div>
+                        <div class="stat-box text-white text-xl text-center font-semibold">{{ p.assists }}</div>
+                        <div class="stat-box text-white text-xl text-center font-semibold">{{ p.deaths }}</div>
+                        <div class="stat-box text-white text-xl text-center font-semibold">{{ p.rating }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- T Team -->
+            <div class="w-1/2 p-6 z-10">
+                <div class="stat-header-grid stat-header-grid-t mb-3">
+                    <div class="text-center stat-label text-base">Rating</div>
+                    <div class="text-center stat-label text-base">Deaths</div>
+                    <div class="text-center stat-label text-base">Assists</div>
+                    <div class="text-center stat-label text-base">Kills</div>
+                </div>
+                <div id="t-players" class="w-full space-y-2">
+                    {% for p in match_data.t_team %}
+                    <div class="player-row player-row-t">
+                        <div class="stat-box text-white text-xl text-center font-semibold">{{ p.rating }}</div>
+                        <div class="stat-box text-white text-xl text-center font-semibold">{{ p.deaths }}</div>
+                        <div class="stat-box text-white text-xl text-center font-semibold">{{ p.assists }}</div>
+                        <div class="stat-box text-white text-xl text-center font-semibold">{{ p.kills }}</div>
+                        <div class="text-white font-bold text-2xl player-name">{{ p.name }}</div>
+                        <div class="elo-circle {{ 'elo-positive' if p.elo_change >= 0 else 'elo-negative' }}">
+                            {{ '+' if p.elo_change >= 0 else '' }}{{ p.elo_change }}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="section-divider"></div>
+
+        <!-- Footer -->
+        <div class="flex items-center justify-between p-4 footer-section">
+            <div class="flex items-center space-x-6 text-xl">
+                <span class="text-white font-bold map-text">MAP</span>
+                <span id="map-name" class="text-white map-text">{{ match_data.map }}</span>
+            </div>
+            <div class="flex-grow text-center flex flex-col items-center">
+                <span class="text-white text-5xl match-result-text">MATCH RESULT</span>
+                <div class="text-white text-2xl mt-2">
+                    <span class="font-bold">{{ match_data.winning_captain }}</span>
+                    <span>TEAM WIN</span>
+                </div>
+            </div>
+            <div class="flex items-center space-x-6 text-xl">
+                <span class="text-white font-bold map-text">{{ "CT" if match_data.winner == "CT" else "T" }}</span>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
