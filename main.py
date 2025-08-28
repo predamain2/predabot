@@ -67,7 +67,7 @@ def load_timeouts():
     return {}
 
 # ---------- Constants ----------
-COMMANDS_CHANNEL_ID = 1401939233874116794  # The channel where party messages are sent
+COMMANDS_CHANNEL_ID = 1391548335478800494  # The channel where party messages are sent
 TIMEOUT_DURATION = 300  # 5 minutes in seconds
 
 # ---------- In-memory DB ----------
