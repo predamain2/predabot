@@ -3,37 +3,170 @@ import discord
 from discord.ext import commands
 from discord.ui import View, Select, Button
 import asyncio, random, uuid, json, pathlib, re, time
+from datetime import datetime, timedelta
 
-class HostInfoView(View):
-    def __init__(self, host_mention: str, host_name: str, host_id: str):
-        super().__init__(timeout=None)  # No timeout for the view
-        self.host_mention = host_mention
-        self.host_name = host_name
-        self.host_id = host_id
-        
-        if host_id and host_id.isdigit():
-            self.add_item(HostInfoButton(host_id, host_name))
+# ---------- Intents & Bot ----------
+intents = discord.Intents.default()
+intents.members = True            # privileged; enable in Dev Portal
+intents.presences = False
+intents.message_content = True
+intents.voice_states = True
 
-class HostInfoButton(Button):
-    def __init__(self, host_id: str, host_name: str):
-        super().__init__(
-            label=f"View {host_name}'s Profile",
-            style=discord.ButtonStyle.primary
-        )
-        self.host_id = host_id
-        self.host_name = host_name
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+# ---------- Persistence helpers ----------
+DATA_FILE = pathlib.Path("players.json")
+RESULTS_FILE = pathlib.Path("results.json")  # NEW: scoreboard submissions
+PARTIES_FILE = pathlib.Path("parties.json")  # NEW: party data
+TIMEOUTS_FILE = pathlib.Path("timeouts.json")
+
+def load_players():
+    if DATA_FILE.exists():
+        try:
+            return json.loads(DATA_FILE.read_text())
+        except Exception:
+            return {}
+    return {}
+
+def load_parties():
+    if PARTIES_FILE.exists():
+        try:
+            return json.loads(PARTIES_FILE.read_text())
+        except Exception:
+            return {}
+    return {}
+
+def save_parties():
+    PARTIES_FILE.write_text(json.dumps(party_data, indent=2))
+
+def save_players():
+    DATA_FILE.write_text(json.dumps(player_data, indent=2))
+
+def load_results():
+    if RESULTS_FILE.exists():
+        try:
+            return json.loads(RESULTS_FILE.read_text())
+        except Exception:
+            return {}
+    return {}
+
+def save_results():
+    RESULTS_FILE.write_text(json.dumps(results_data, indent=2))
+
+def save_timeouts():
+    """Save timeout data to file"""
+    TIMEOUTS_FILE.write_text(json.dumps(timeouts, indent=2))
+
+def load_timeouts():
+    """Load timeout data from file"""
+    if TIMEOUTS_FILE.exists():
+        try:
+            return json.loads(TIMEOUTS_FILE.read_text())
+        except Exception:
+            return {}
+    return {}
+
+# ---------- Constants ----------
+COMMANDS_CHANNEL_ID = 1401939233874116794  # The channel where party messages are sent
+TIMEOUT_DURATION = 300  # 5 minutes in seconds
+
+# ---------- In-memory DB ----------
+player_data = load_players()       # keyed by string id
+party_data = load_parties()        # keyed by leader_id -> {members: [member_ids], team: None}
+active_picks = {}                  # keyed by text channel id -> pick session
+lobby_status = {}                  # keyed by text channel id -> {message_id, state: 'waiting'/'picking'/'mapban'}
+
+# NEW: in-memory submission trackers
+results_data = load_results()      # dict: match_id -> submission dict
+active_submissions = set()         # match_ids currently being submitted (concurrency lock)
+pending_upload = {}                # user_id -> {channel_id, match_id, started_at}
+
+# Party invitation system
+party_invites = {}  # keyed by invited_id -> {leader_id, expires_at}
+
+# Timeout system
+timeouts = load_timeouts() # user_id -> timeout_end_timestamp
+
+# ---------- Utility helpers ----------
+def is_player_timed_out(user_id):
+    """Check if a player is currently timed out"""
+    current_time = time.time()
+    timeout_end = timeouts.get(str(user_id))
     
-    async def callback(self, interaction: discord.Interaction):
-        # Create embed with host profile info
-        embed = discord.Embed(
-            title=f"{self.host_name}'s Profile",
-            color=discord.Color.blue()
-        )
-        embed.add_field(name="Standoff2 ID", value=self.host_id, inline=False)
-        embed.set_footer(text="Profile data updated on match creation")
-        
-        # Send as ephemeral message
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+    if timeout_end and current_time < timeout_end:
+        return True
+    elif timeout_end and current_time >= timeout_end:
+        # Timeout has expired, remove it
+        del timeouts[str(user_id)]
+        save_timeouts()
+    
+    return False
+
+def get_timeout_remaining(user_id):
+    """Get remaining timeout time in seconds"""
+    current_time = time.time()
+    timeout_end = timeouts.get(str(user_id))
+    
+    if timeout_end and current_time < timeout_end:
+        return int(timeout_end - current_time)
+    return 0
+
+def add_timeout(user_id, duration=TIMEOUT_DURATION):
+    """Add a timeout for a user"""
+    timeout_end = time.time() + duration
+    timeouts[str(user_id)] = timeout_end
+    save_timeouts()
+    return timeout_end
+
+def key_of(m):
+    """Return a stable string key for member-like objects (Member or FakeMember or string/int)"""
+    print(f"\n=== key_of called with: {m} (type: {type(m)}) ===")
+    if isinstance(m, (int,)):
+        result = str(m)
+        print(f"key_of: Input was integer, returning: {result}")
+        return result
+    try:
+        result = str(getattr(m, "id"))
+        print(f"key_of: Got ID from object: {result}")
+        return result
+    except Exception as e:
+        result = str(m)
+        print(f"key_of: Fell back to string conversion due to {type(e)}: {result}")
+        return result
+
+def id_of(m):
+    """Return integer id where possible. For FakeMember negative ids are preserved."""
+    try:
+        return int(getattr(m, "id", m))
+    except Exception:
+        return int(m)
+
+def ensure_player(m):
+    k = key_of(m)
+    if k not in player_data:
+        player_data[k] = {
+            "nick": getattr(m, "display_name", f"Player{k}"),
+            "id": f"AUTO_{k}",
+            "elo": config.DEFAULT_ELO,
+            "level": 1,
+            "wins": 0,
+            "losses": 0
+        }
+        save_players()
+    return player_data[k]
+
+def label_for(m):
+    p = player_data.get(key_of(m)) or ensure_player(m)
+    return f"{p['nick']} | L{p['level']} | ELO {p['elo']}"
+
+class FakeMember:
+    def __init__(self, idx):
+        self.id = -(idx+1)
+        self.display_name = f"FakePlayer{idx+1}"
+        self.mention = f"@{self.display_name}"
+        self.bot = False
+
+
 import aiohttp
 import os
 import config
@@ -107,119 +240,37 @@ async def render_html_to_image(match_data, output_path, html_template='scoreboar
 tracemalloc.start()
 
 
-# ---------- Intents & Bot ----------
-intents = discord.Intents.default()
-intents.members = True            # privileged; enable in Dev Portal
-intents.presences = False
-intents.message_content = True
-intents.voice_states = True
+# ---------- Host Info View & Button ----------
+class HostInfoButton(Button):
+    def __init__(self, host_id: str, host_name: str):
+        super().__init__(
+            label=f"View {host_name}'s Profile",
+            style=discord.ButtonStyle.primary
+        )
+        self.host_id = host_id
+        self.host_name = host_name
+    
+    async def callback(self, interaction: discord.Interaction):
+        # Create embed with host profile info
+        embed = discord.Embed(
+            title=f"{self.host_name}'s Profile",
+            color=discord.Color.blue()
+        )
+        embed.add_field(name="Standoff2 ID", value=self.host_id, inline=False)
+        embed.set_footer(text="Profile data updated on match creation")
+        
+        # Send as ephemeral message
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
-bot = commands.Bot(command_prefix="!", intents=intents)
-
-# ---------- Persistence helpers ----------
-DATA_FILE = pathlib.Path("players.json")
-RESULTS_FILE = pathlib.Path("results.json")  # NEW: scoreboard submissions
-PARTIES_FILE = pathlib.Path("parties.json")  # NEW: party data
-
-def load_players():
-    if DATA_FILE.exists():
-        try:
-            return json.loads(DATA_FILE.read_text())
-        except Exception:
-            return {}
-    return {}
-
-def load_parties():
-    if PARTIES_FILE.exists():
-        try:
-            return json.loads(PARTIES_FILE.read_text())
-        except Exception:
-            return {}
-    return {}
-
-def save_parties():
-    PARTIES_FILE.write_text(json.dumps(party_data, indent=2))
-
-def save_players():
-    DATA_FILE.write_text(json.dumps(player_data, indent=2))
-
-def load_results():
-    if RESULTS_FILE.exists():
-        try:
-            return json.loads(RESULTS_FILE.read_text())
-        except Exception:
-            return {}
-    return {}
-
-def save_results():
-    RESULTS_FILE.write_text(json.dumps(results_data, indent=2))
-
-# ---------- Constants ----------
-COMMANDS_CHANNEL_ID = 1401939233874116794  # The channel where party messages are sent
-
-# ---------- In-memory DB ----------
-player_data = load_players()       # keyed by string id
-party_data = load_parties()        # keyed by leader_id -> {members: [member_ids], team: None}
-active_picks = {}                  # keyed by text channel id -> pick session
-lobby_status = {}                  # keyed by text channel id -> {message_id, state: 'waiting'/'picking'/'mapban'}
-
-# NEW: in-memory submission trackers
-results_data = load_results()      # dict: match_id -> submission dict
-active_submissions = set()         # match_ids currently being submitted (concurrency lock)
-pending_upload = {}                # user_id -> {channel_id, match_id, started_at}
-
-# Party invitation system
-party_invites = {}  # keyed by invited_id -> {leader_id, expires_at}
-
-# ---------- Utility helpers ----------
-def key_of(m):
-    """Return a stable string key for member-like objects (Member or FakeMember or string/int)"""
-    print(f"\n=== key_of called with: {m} (type: {type(m)}) ===")
-    if isinstance(m, (int,)):
-        result = str(m)
-        print(f"key_of: Input was integer, returning: {result}")
-        return result
-    try:
-        result = str(getattr(m, "id"))
-        print(f"key_of: Got ID from object: {result}")
-        return result
-    except Exception as e:
-        result = str(m)
-        print(f"key_of: Fell back to string conversion due to {type(e)}: {result}")
-        return result
-
-def id_of(m):
-    """Return integer id where possible. For FakeMember negative ids are preserved."""
-    try:
-        return int(getattr(m, "id", m))
-    except Exception:
-        return int(m)
-
-def ensure_player(m):
-    k = key_of(m)
-    if k not in player_data:
-        player_data[k] = {
-            "nick": getattr(m, "display_name", f"Player{k}"),
-            "id": f"AUTO_{k}",
-            "elo": config.DEFAULT_ELO,
-            "level": 1,
-            "wins": 0,
-            "losses": 0
-        }
-        save_players()
-    return player_data[k]
-
-def label_for(m):
-    p = player_data.get(key_of(m)) or ensure_player(m)
-    return f"{p['nick']} | L{p['level']} | ELO {p['elo']}"
-
-class FakeMember:
-    def __init__(self, idx):
-        self.id = -(idx+1)
-        self.display_name = f"FakePlayer{idx+1}"
-        self.mention = f"@{self.display_name}"
-        self.bot = False
-
+class HostInfoView(View):
+    def __init__(self, host_mention: str, host_name: str, host_id: str):
+        super().__init__(timeout=None)  # No timeout for the view
+        self.host_mention = host_mention
+        self.host_name = host_name
+        self.host_id = host_id
+        
+        if host_id and host_id.isdigit():
+            self.add_item(HostInfoButton(host_id, host_name))
 
 
 # ---------- Registration modal & view ----------
@@ -314,8 +365,6 @@ class RegisterModal(discord.ui.Modal, title="Player Registration"):
 class RegisterView(View):
     def __init__(self):
         super().__init__(timeout=None)
-        # FIX: remove duplicate button. We rely ONLY on the decorator button below.
-        # (no programmatic add_item here)
 
     @discord.ui.button(label="Register", style=discord.ButtonStyle.green, custom_id="standoff_register_btn")
     async def reg_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -518,47 +567,6 @@ def build_roster_embed(st):
     e.add_field(name="Available players", value=w, inline=False)
     return e
 
-class HostInfoButton(discord.ui.Button):
-    def __init__(self, host_mention, host_name, host_id):
-        super().__init__(
-            style=discord.ButtonStyle.blurple,
-            label="Get Host Information",
-            emoji="ℹ️",
-            custom_id="host_info"
-        )
-        self.host_mention = host_mention
-        self.host_name = host_name
-        self.host_id = host_id
-
-    async def callback(self, interaction: discord.Interaction):
-        embed = discord.Embed(
-            title="🎮 Match Host Information",
-            color=discord.Color.blue()
-        )
-        
-        info_lines = [
-            f"👤 {self.host_mention}",
-            f"📝 Nickname: **{self.host_name}**"
-        ]
-        
-        if self.host_id and self.host_id.isdigit():
-            info_lines.extend([
-                f"🆔 **`{self.host_id}`**",
-                "",
-                "**Profile Link:**",
-                f"https://link.standoff2.com/en/profile/view/{self.host_id}"
-            ])
-        
-        embed.description = "\n".join(info_lines)
-        embed.set_footer(text="You can copy the ID by tapping it on mobile")
-        
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-class HostInfoView(discord.ui.View):
-    def __init__(self, host_mention, host_name, host_id):
-        super().__init__(timeout=None)
-        self.add_item(HostInfoButton(host_mention, host_name, host_id))
-
 async def announce_teams_final(channel: discord.TextChannel, match_id, chosen_map, st):
     print("\n=== Starting Team Announcement ===")
     print(f"Match ID: {match_id}")
@@ -644,15 +652,6 @@ async def announce_teams_final(channel: discord.TextChannel, match_id, chosen_ma
     
     # Render HTML to image
     image_file = 'temp_match.png'
-    match_data = {
-        'match_id': match_id,
-        'map_name': chosen_map,
-        'team1': team1,
-        'team2': team2,
-        'host_mention': host_mention,
-        'host_id': host_id if host_id and host_id.isdigit() else '',
-        'host_name': host_name
-    }
     await render_html_to_image(match_data, image_file, temp_file)
     
     # Create the Discord attachment
@@ -677,14 +676,16 @@ async def announce_teams_final(channel: discord.TextChannel, match_id, chosen_ma
             msg = await channel.fetch_message(msg_id)
             await msg.edit(embed=embed, attachments=[file], view=view, content=None)
             print("Debug - Message edited successfully")
-            return msg
+        else:
+            print("Debug - Sending new message")
+            msg = await channel.send(embed=embed, file=file, view=view)
+            print("Debug - New message sent")
     except Exception as e:
-        print(f"Debug - Error editing message: {e}")
-    
-    print("Debug - Sending new message")
-    # Send the new announcement
-    msg = await channel.send(embed=embed, file=file, view=view)
-    
+        print(f"Debug - Error handling message: {e}")
+        print("Debug - Sending new message as fallback")
+        msg = await channel.send(embed=embed, file=file, view=view)
+        print("Debug - New message sent")
+
     # Clean up the temporary files
     try:
         os.remove(temp_file)
@@ -693,9 +694,6 @@ async def announce_teams_final(channel: discord.TextChannel, match_id, chosen_ma
         print(f"Warning: Could not remove temp files: {e}")
     
     return msg
-    # Send the message with embed and view
-    return await channel.send(embed=embed, view=view)
-    print("Debug - New message sent")
 
 # ---------- Start picking stage ----------
 async def start_picking_stage(channel, member_list):
@@ -847,11 +845,18 @@ async def start_picking_stage(channel, member_list):
         lobby_status[chan_id] = {"message_id": new_msg.id, "state": "picking"}
 
 # ---------- Cancel session helper ----------
-async def cancel_session_and_reset(channel_id, reason="A player left. Lobby reset."):
+async def cancel_session_and_reset(channel_id, reason="A player left. Lobby reset.", leaver_id=None):
     """Cancel active picking/mapban in this channel and reset waiting message."""
+    # Add timeout for the leaver
+    if leaver_id:
+        timeout_end = add_timeout(leaver_id)
+        timeout_end_dt = datetime.fromtimestamp(timeout_end)
+        timeout_msg = f"\n🚫 <@{leaver_id}> has been timed out until {timeout_end_dt.strftime('%H:%M:%S')} for leaving during an active session."
+        reason += timeout_msg
+    
     # cancel pick session
     st = active_picks.pop(channel_id, None)
-    # If map ban cog is active, try to let it cleanup (map_ban stores its own states)
+    # If map ban cog is active, try to let it cleanup
     map_cog = bot.get_cog('MapBan')
     if map_cog:
         try:
@@ -883,6 +888,7 @@ async def cancel_session_and_reset(channel_id, reason="A player left. Lobby rese
             lobby_status[channel_id] = {"message_id": new.id, "state": "waiting"}
         except Exception:
             pass
+
 
 # =========================================================
 #               SCOREBOARD SUBMISSION SYSTEM
@@ -1038,8 +1044,7 @@ async def on_message(message: discord.Message):
                 "_Please wait while I process your submission..._"
             ),
             color=discord.Color.blue()
-        ),
-        ephemeral=True
+        )
     )
 
     match_id = pend["match_id"]
@@ -1049,14 +1054,14 @@ async def on_message(message: discord.Message):
             del pending_upload[message.author.id]
         except Exception:
             pass
-        await message.channel.send(f"⚠️ {message.author.mention} This Match ID was already submitted.")
+        await loading_msg.edit(embed=discord.Embed(title="Error", description=f"⚠️ {message.author.mention} This Match ID was already submitted.", color=discord.Color.red()))
         return
 
     # --- OCR and result processing ---
     try:
         match_data = await parse_scoreboard_from_url(attachment.url)
     except Exception as e:
-        await message.channel.send(f"❌ Failed to process scoreboard: {e}")
+        await loading_msg.edit(embed=discord.Embed(title="Error", description=f"❌ Failed to process scoreboard: {e}", color=discord.Color.red()))
         active_submissions.discard(match_id)
         del pending_upload[message.author.id]
         return
@@ -1070,12 +1075,6 @@ async def on_message(message: discord.Message):
         matches_data = json.loads(pathlib.Path("matches.json").read_text())
         original_match = matches_data["matches"].get(str(match_id))
         
-        # Find winner's captain
-        ct_is_team1 = len(set(p['name'].lower() for p in match_data['ct_team']) & 
-                         set(player_data[k]['nick'].lower() for k in player_data if player_data[k].get('id') in original_match['team1'])) > \
-                     len(set(p['name'].lower() for p in match_data['ct_team']) & 
-                         set(player_data[k]['nick'].lower() for k in player_data if player_data[k].get('id') in original_match['team2']))
-                         
         # Determine which team won and get their captain
         score_ct, score_t = map(int, match_data['score'].split('-'))
         ct_won = score_ct > score_t
@@ -1101,7 +1100,7 @@ async def on_message(message: discord.Message):
         match_data['winning_team'] = winning_team
         match_data['losing_team'] = losing_team
     except Exception as e:
-        await message.channel.send(f"❌ Error processing match data: {str(e)}")
+        await loading_msg.edit(embed=discord.Embed(title="Error", description=f"❌ Error processing match data: {str(e)}", color=discord.Color.red()))
         active_submissions.discard(match_id)
         del pending_upload[message.author.id]
         return
@@ -1238,7 +1237,6 @@ async def on_message(message: discord.Message):
     # Process all players' stats
     for p in match_data.get("ct_team", []) + match_data.get("t_team", []):
         is_leaver = p.get('was_absent', False) or (p.get('kills', 0) == 0 and p.get('deaths', 0) >= 10)
-        is_winner = p in winner_team
         
         if is_leaver:
             # Set ELO change for display
@@ -1258,7 +1256,7 @@ async def on_message(message: discord.Message):
                     break  # Found the player, no need to continue searching
         else:
             # Normal ELO change for active players
-                p["elo_change"] = player_elo_changes.get(p["name"], 0)
+            p["elo_change"] = player_elo_changes.get(p["name"], 0)
 
     # Ensure missing players are included in the final results
     # Store the submission in results.json
@@ -1267,7 +1265,7 @@ async def on_message(message: discord.Message):
         "submitter_id": message.author.id,
         "attachment_url": attachment.url,
         "submitted_at": int(time.time()),
-        "winner": match_data.get("winner"),
+        "winner": "CT" if ct_won else "T",
         "score": match_data.get("score"),
         "map": original_match["map"],
         "mvp": mvp_player,  # Use our newly calculated MVP
@@ -1295,11 +1293,11 @@ async def on_message(message: discord.Message):
                     "Click the channel link above to view them!"
                 ),
                 color=discord.Color.green()
-            )
+            ),
+            view=None
         )
     except Exception as e:
         print(f"Failed to edit loading message: {e}")
-        # Fallback to new message
         try:
             await message.channel.send(
                 embed=discord.Embed(
@@ -1312,8 +1310,6 @@ async def on_message(message: discord.Message):
             )
         except Exception as e:
             print(f"Failed to send completion message: {e}")
-    except Exception:
-        pass
 
     # delete the user's uploaded screenshot message
     try:
@@ -1335,7 +1331,7 @@ async def on_message(message: discord.Message):
             await dest.send(file=discord.File(output_file))
         except Exception as e:
             await message.channel.send(f"⚠️ Failed to render scoreboard image: {e}")
-        # Always send the embed as well for comparison
+        
         try:
             # Create the MVP string with kills
             mvp_string = f"{mvp_player} ({max_kills} kills) 🏆" if mvp_player else "None"
@@ -1344,7 +1340,7 @@ async def on_message(message: discord.Message):
                 title="📊 Match Results",
                 description=(
                     f"**Match ID:** `{match_id}`\n"
-                    f"**Winner:** {match_data.get('winner')}\n"
+                    f"**Winner:** {'CT' if ct_won else 'T'}\n"
                     f"**Score:** {match_data.get('score')}\n"
                     f"**MVP:** {mvp_string} (+5 ELO bonus)\n"
                 ),
@@ -1400,6 +1396,9 @@ async def on_message(message: discord.Message):
 
 @bot.event
 async def on_ready():
+    global timeouts
+    timeouts = load_timeouts()
+
     print('Bot ready', bot.user)
 
     print("Starting bot setup...")
@@ -1440,23 +1439,10 @@ async def on_ready():
                 await member.edit(nick=v['nick'])
             except Exception:
                 pass
-    try:
-        print('Loading commands cog...')
-        await bot.load_extension('commands')
-        print('Commands cog loaded.')
-    except Exception as e:
-        print(f"Failed to load commands cog: {e}")
-        
-    try:
-        await bot.load_extension('map_ban')
-        print('map_ban loaded')
-    except Exception as e:
-        print('map_ban load error', e)
         
     # Sync commands with Discord
     print("Syncing commands...")
     try:
-        guild = bot.get_guild(config.GUILD_ID)
         if guild:
             # First clear all commands to ensure clean slate
             bot.tree.clear_commands(guild=guild)
@@ -1505,39 +1491,69 @@ async def on_ready():
 
 @bot.event
 async def on_voice_state_update(member, before, after):
-    # join to lobby detection
-    # If someone leaves or moves, and there's an active pick or mapban, cancel session and reset
     guild = member.guild
-    # When someone LEAVES the lobby VC or moves between channels, detect
     left_lobby = before.channel and before.channel.id == config.LOBBY_VOICE_CHANNEL_ID and (not after.channel or after.channel.id != config.LOBBY_VOICE_CHANNEL_ID)
     moved_into_lobby = after.channel and after.channel.id == config.LOBBY_VOICE_CHANNEL_ID and (not before.channel or before.channel.id != config.LOBBY_VOICE_CHANNEL_ID)
 
     # If someone left the lobby and there's an active session, reset
     if left_lobby:
         text_ch = guild.get_channel(config.LOBBY_TEXT_CHANNEL_ID)
-        # find pick session that uses this text channel
         if text_ch:
             chan_id = text_ch.id
-            # Only reset if there's an active pick session or if it's during map ban (but not when match is created)
             if active_picks.get(chan_id):
-                await cancel_session_and_reset(chan_id, reason=f"{member.display_name} left during an active session. Lobby reset.")
+                await cancel_session_and_reset(chan_id, reason=f"{member.display_name} left during an active session. Lobby reset.", leaver_id=member.id)
                 return
-            # Check if it's during map ban (but not when match is created)
             map_cog = bot.get_cog('MapBan')
             if map_cog and chan_id in map_cog.active:
                 st = map_cog.active[chan_id]
-                # Only reset if map ban is in progress (not when match is created and players are being kicked)
                 if len([m for m in st["maps"] if m not in st["banned"]]) > 1:
-                    await cancel_session_and_reset(chan_id, reason=f"{member.display_name} left during map ban. Lobby reset.")
+                    await cancel_session_and_reset(chan_id, reason=f"{member.display_name} left during map ban. Lobby reset.", leaver_id=member.id)
                     try:
-                        # Clean up map ban state
                         del map_cog.active[chan_id]
                     except:
                         pass
                     return
 
-    # When someone joins, update the single status message to show waiting/players count
+    # When someone joins, check if they're timed out first
     if moved_into_lobby:
+        # Check if player is timed out
+        if is_player_timed_out(member.id):
+            remaining = get_timeout_remaining(member.id)
+            minutes = remaining // 60
+            seconds = remaining % 60
+            
+            try:
+                # Move them out of the lobby
+                await member.move_to(None)
+                
+                # Send timeout message
+                text_ch = guild.get_channel(config.LOBBY_TEXT_CHANNEL_ID)
+                if text_ch:
+                    embed = discord.Embed(
+                        title="🚫 Player Timed Out",
+                        description=f"{member.mention} is timed out for leaving during an active session.\n\nTime remaining: {minutes}m {seconds}s",
+                        color=discord.Color.red()
+                    )
+                    await text_ch.send(embed=embed, delete_after=10)
+                    
+                # Try to DM the user
+                try:
+                    dm_embed = discord.Embed(
+                        title="🚫 Lobby Timeout",
+                        description=f"You are timed out from joining lobbies for leaving during an active session.\n\nTime remaining: {minutes}m {seconds}s",
+                        color=discord.Color.red()
+                    )
+                    await member.send(embed=dm_embed)
+                except:
+                    pass  # User might have DMs disabled
+                    
+                return  # Don't process normal lobby join logic
+                
+            except discord.Forbidden:
+                # Bot doesn't have permission to move member
+                pass
+        
+        # Normal lobby join logic (only if not timed out)
         lobby = after.channel
         text_ch = guild.get_channel(config.LOBBY_TEXT_CHANNEL_ID)
         if not text_ch:
@@ -1733,33 +1749,14 @@ env = Environment(loader=FileSystemLoader('.'))
 
 @bot.tree.command(name="stats", description="View your Standoff2 stats")
 async def stats(interaction: discord.Interaction):
-    html = None  # Initialize html variable in outer scope
-    output_path = None
+    await interaction.response.defer(ephemeral=True)
+    output_path = f"temp_stats_{interaction.user.id}.png"
     
     try:
-        try:
-            # Try to defer, but handle if interaction is no longer valid
-            await interaction.response.defer(ephemeral=True)
-        except discord.NotFound:
-            # If interaction is expired, we can't continue
-            return
-            
-        # Get player data
         key = str(interaction.user.id)
-        try:
-            with open('players.json', 'r') as f:
-                player_data = json.load(f)
-        except Exception as e:
-            if not interaction.response.is_done():
-                await interaction.response.send_message('❌ Error loading player data. Please try again.', ephemeral=True)
-            return
-
         pdata = player_data.get(key)
         if not pdata:
-            if not interaction.response.is_done():
-                await interaction.response.send_message('❌ You are not registered. Use `/register` first.', ephemeral=True)
-            else:
-                await interaction.followup.send('❌ You are not registered. Use `/register` first.', ephemeral=True)
+            await interaction.followup.send('❌ You are not registered. Use `/register` first.', ephemeral=True)
             return
         
         # Calculate basic stats
@@ -1768,172 +1765,84 @@ async def stats(interaction: discord.Interaction):
         total_games = wins + losses
         
         # Calculate kills and deaths from results.json
-        try:
-            with open('results.json', 'r') as f:
-                results_data = json.load(f)
-                
-            total_kills = 0
-            total_deaths = 0
-            player_name = pdata.get('nick').lower()
-            
-            # Iterate through all matches
-            for match in results_data.values():
-                # Check winning team
-                for player in match.get('winning_team', []):
-                    if player.get('name', '').lower() == player_name:
-                        total_kills += player.get('kills', 0)
-                        total_deaths += player.get('deaths', 0)
-                
-                # Check losing team
-                for player in match.get('losing_team', []):
+        total_kills, total_deaths = 0, 0
+        player_name = pdata.get('nick', '').lower()
+        for match in results_data.values():
+            for team_key in ['winning_team', 'losing_team']:
+                for player in match.get(team_key, []):
                     if player.get('name', '').lower() == player_name:
                         total_kills += player.get('kills', 0)
                         total_deaths += player.get('deaths', 0)
                         
-        except Exception as e:
-            print(f"Error reading results.json: {e}")
-            total_kills = 0
-            total_deaths = 0
-        
-        # Calculate win rate and K/D ratio
         win_rate = f"{(wins / total_games * 100):.1f}" if total_games > 0 else "0"
-        
-        # K/D ratio calculation - if no deaths, K/D equals kills
-        if total_deaths > 0:
-            kd_ratio = f"{(total_kills / total_deaths):.2f}"
-        else:
-            kd_ratio = str(total_kills)
-        
-        # Calculate points
-        points = pdata.get('elo', 1000)
+        kd_ratio = f"{(total_kills / total_deaths):.2f}" if total_deaths > 0 else str(total_kills)
         
         # Prepare stats data
         stats_data = {
             'nickname': pdata.get('nick', 'Unknown'),
             'level': pdata.get('level', 0),
-            'points': points,
+            'points': pdata.get('elo', 1000),
             'total_games': total_games,
             'wins': wins,
             'losses': losses,
             'kills': total_kills,
             'deaths': total_deaths,
             'kd': kd_ratio,
-            'win_rate': win_rate  # Note: Template adds the % symbol
+            'win_rate': win_rate
         }
         
         # Generate HTML and render to image
-        output_path = f"temp_stats_{interaction.user.id}.png"
         temp_html = 'temp_stats.html'
-        
-        try:
-            # Render the stats template
-            template = env.get_template('stats.html')
-            html = template.render(stats=stats_data)
-            
-            # Save HTML file
-            with open(temp_html, 'w', encoding='utf-8') as f:
-                f.write(html)
+        template = env.get_template('stats.html')
+        html = template.render(stats=stats_data)
+        with open(temp_html, 'w', encoding='utf-8') as f:
+            f.write(html)
 
-            # Convert HTML to image using playwright
-            async with async_playwright() as p:
-                browser = await p.chromium.launch()
-                page = await browser.new_page()
-                
-                # Set viewport size to ensure consistent rendering
-                await page.set_viewport_size({'width': 1000, 'height': 800})
-                
-                # Load the HTML content
-                await page.goto('file://' + os.path.abspath(temp_html))
-                await page.wait_for_load_state('networkidle')
-                await asyncio.sleep(0.5)  # Give a moment for fonts to load
-                
-                # Take the screenshot
-                await page.screenshot(path=output_path)
-                await browser.close()
-
-            # Send the stats image
-            await interaction.followup.send(file=discord.File(output_path), ephemeral=True)
-            
-        except Exception as e:
-            error_msg = f'❌ Error generating stats image: {str(e)}'
-            if not interaction.response.is_done():
-                await interaction.response.send_message(error_msg, ephemeral=True)
-            else:
-                await interaction.followup.send(error_msg, ephemeral=True)
-            
-        finally:
-            # Clean up temporary files
-            try:
-                if output_path and os.path.exists(output_path):
-                    os.remove(output_path)
-                if os.path.exists(temp_html):
-                    os.remove(temp_html)
-            except Exception:
-                pass
-            
-    except Exception as e:
-        error_msg = f'❌ An error occurred: {str(e)}'
-        if not interaction.response.is_done():
-            await interaction.response.send_message(error_msg, ephemeral=True)
-        else:
-            try:
-                await interaction.followup.send(error_msg, ephemeral=True)
-            except Exception:
-                pass
-            await page.screenshot(path=output_path, full_page=True)
+        async with async_playwright() as p:
+            browser = await p.chromium.launch()
+            page = await browser.new_page()
+            await page.set_viewport_size({'width': 1000, 'height': 800})
+            await page.goto('file://' + os.path.abspath(temp_html))
+            await page.wait_for_load_state('networkidle')
+            await asyncio.sleep(0.5)
+            await page.screenshot(path=output_path)
             await browser.close()
         
         # Get recent matches
         recent_matches = []
         all_results = load_results()
+        player_nick = pdata["nick"]
+        
         for match_id, match_data in reversed(list(all_results.items())):
-            # Check if the player was in this match
-            player_found = False
-            elo_change = 0
-            for team in ["team1", "team2"]:
-                for player in match_data.get(team, []):
-                    if player.get("name") == pdata["nick"]:
-                        player_found = True
+            player_found_in_match = False
+            for team_key in ["winning_team", "losing_team"]:
+                for player in match_data.get(team_key, []):
+                    if player.get("name") == player_nick:
+                        is_winner = team_key == "winning_team"
                         elo_change = player.get("elo_change", 0)
+                        recent_matches.append({
+                            "result": "Victory 🏆" if is_winner else "Defeat 💔",
+                            "elo_change": elo_change
+                        })
+                        player_found_in_match = True
                         break
-                if player_found:
-                    recent_matches.append({
-                        "id": match_id,
-                        "date": match_data.get("date", "Unknown date"),
-                        "result": "Victory 🏆" if (team == "team1" and match_data.get("winner") == 1) or 
-                                               (team == "team2" and match_data.get("winner") == 2) else "Defeat 💔",
-                        "elo_change": elo_change
-                    })
+                if player_found_in_match:
                     break
-            
-            if len(recent_matches) >= 5:  # Only show last 5 matches
+            if len(recent_matches) >= 5:
                 break
                 
-        # Create embeds
-        embed = discord.Embed(
-            title=f"📊 Stats for {pdata['nick']}",
-            color=discord.Color.blue()
-        )
-        
-        # Send stats image and recent matches embed
-        with open(output_path, 'rb') as f:
-            picture = discord.File(f)
-            
-            # Recent matches section
-            if recent_matches:
-                match_lines = []
-                for match in recent_matches:
-                    emoji = "📈" if match["elo_change"] > 0 else "📉" if match["elo_change"] < 0 else "📊"
-                    elo_text = f"{match['elo_change']:+}" if match["elo_change"] != 0 else "±0"
-                    match_lines.append(
-                        f"{emoji} {match['result']} ({elo_text} ELO)"
-                    )
-                matches_text = "\n".join(match_lines)
-                embed.add_field(name="Recent Matches", value=matches_text, inline=False)
-            else:
-                embed.add_field(name="Recent Matches", value="No recent matches found", inline=False)
+        embed = discord.Embed(title=f"📊 Stats for {pdata['nick']}", color=discord.Color.blue())
+        if recent_matches:
+            match_lines = []
+            for match in recent_matches:
+                emoji = "📈" if match["elo_change"] > 0 else "📉" if match["elo_change"] < 0 else "📊"
+                elo_text = f"{match['elo_change']:+}" if match["elo_change"] != 0 else "±0"
+                match_lines.append(f"{emoji} {match['result']} ({elo_text} ELO)")
+            embed.add_field(name="Recent Matches", value="\n".join(match_lines), inline=False)
+        else:
+            embed.add_field(name="Recent Matches", value="No recent matches found", inline=False)
                 
-            await interaction.followup.send(file=picture, embed=embed)
+        await interaction.followup.send(file=discord.File(output_path), embed=embed, ephemeral=True)
             
     except Exception as e:
         await interaction.followup.send(f"❌ Error generating stats: {str(e)}", ephemeral=True)
@@ -1941,13 +1850,12 @@ async def stats(interaction: discord.Interaction):
         
     finally:
         # Clean up temporary files
-        try:
-            if os.path.exists(output_path):
-                os.remove(output_path)
-            if os.path.exists('temp_stats.html'):
-                os.remove('temp_stats.html')
-        except:
-            pass
+        for f in [output_path, 'temp_stats.html']:
+            if os.path.exists(f):
+                try:
+                    os.remove(f)
+                except Exception as e:
+                    print(f"Error cleaning up file {f}: {e}")
 
 @bot.tree.command(name="party_invite", description="Invite a player to your party")
 @discord.app_commands.describe(player="The player to invite to your party")
@@ -1985,80 +1893,60 @@ async def party_invite(interaction: discord.Interaction, player: discord.Member)
         'expires_at': time.time() + 60  # Expires in 60 seconds
     }
     
-    COMMANDS_CHANNEL_ID = 1401939233874116794  # The channel where invites should be sent
-    
-    # Create accept/decline buttons
     class InviteView(discord.ui.View):
         def __init__(self):
             super().__init__(timeout=60)
             
+        async def on_timeout(self):
+            # Clean up the message on timeout
+            try:
+                await self.message.edit(content="*This party invite has expired.*", view=None)
+            except:
+                pass
+
         @discord.ui.button(label="Accept", style=discord.ButtonStyle.green)
         async def accept(self, button_interaction: discord.Interaction, button: discord.ui.Button):
-            try:
-                if button_interaction.user.id != int(invited_id):
-                    await button_interaction.response.send_message("This invite is not for you.", ephemeral=True)
-                    return
-                    
-                if invited_id not in party_invites or party_invites[invited_id]['leader_id'] != leader_id:
-                    await button_interaction.response.send_message("This invite has expired.", ephemeral=True)
-                    return
-                    
-                # Create or update party
-                if leader_id not in party_data:
-                    party_data[leader_id] = {'members': [leader_id], 'team': None}
-                party_data[leader_id]['members'].append(invited_id)
-                save_parties()
-                
-                # Clean up invite
-                del party_invites[invited_id]
-                
-                # Send messages to the commands channel
-                commands_channel = button_interaction.guild.get_channel(COMMANDS_CHANNEL_ID)
-                try:
-                    await button_interaction.response.send_message(f"{button_interaction.user.display_name} has joined {interaction.user.display_name}'s party!", ephemeral=False)
-                except discord.errors.NotFound:
-                    if commands_channel:
-                        await commands_channel.send(f"{button_interaction.user.display_name} has joined {interaction.user.display_name}'s party!")
-                
-                self.stop()
-            except Exception as e:
-                try:
-                    await button_interaction.followup.send("An error occurred while processing your response. Please try again.", ephemeral=True)
-                except:
-                    pass
+            if button_interaction.user.id != int(invited_id):
+                await button_interaction.response.send_message("This invite is not for you.", ephemeral=True)
+                return
+            
+            invite = party_invites.get(invited_id)
+            if not invite or invite['leader_id'] != leader_id:
+                await button_interaction.response.send_message("This invite has expired or is invalid.", ephemeral=True)
+                await self.message.edit(content="*This party invite has expired.*", view=None)
+                return
+            
+            # Create or update party
+            if leader_id not in party_data:
+                party_data[leader_id] = {'members': [leader_id], 'team': None}
+            party_data[leader_id]['members'].append(invited_id)
+            save_parties()
+            
+            del party_invites[invited_id]
+            
+            await button_interaction.message.edit(content=f"**{button_interaction.user.display_name}** has joined **{interaction.user.display_name}**'s party!", view=None)
+            self.stop()
             
         @discord.ui.button(label="Decline", style=discord.ButtonStyle.red)
         async def decline(self, button_interaction: discord.Interaction, button: discord.ui.Button):
-            try:
-                if button_interaction.user.id != int(invited_id):
-                    await button_interaction.response.send_message("This invite is not for you.", ephemeral=True)
-                    return
-                    
-                if invited_id in party_invites:
-                    del party_invites[invited_id]
-                    
-                # Send messages to the commands channel
-                commands_channel = button_interaction.guild.get_channel(COMMANDS_CHANNEL_ID)
-                try:
-                    await button_interaction.response.send_message(f"{button_interaction.user.display_name} declined {interaction.user.display_name}'s party invite.", ephemeral=False)
-                except discord.errors.NotFound:
-                    if commands_channel:
-                        await commands_channel.send(f"{button_interaction.user.display_name} declined {interaction.user.display_name}'s party invite.")
-                
-                self.stop()
-            except Exception as e:
-                try:
-                    await button_interaction.followup.send("An error occurred while processing your response. Please try again.", ephemeral=True)
-                except:
-                    pass
+            if button_interaction.user.id != int(invited_id):
+                await button_interaction.response.send_message("This invite is not for you.", ephemeral=True)
+                return
+            
+            if invited_id in party_invites:
+                del party_invites[invited_id]
+            
+            await button_interaction.message.edit(content=f"**{button_interaction.user.display_name}** declined **{interaction.user.display_name}**'s party invite.", view=None)
+            self.stop()
     
     view = InviteView()
     commands_channel = interaction.guild.get_channel(COMMANDS_CHANNEL_ID)
     if commands_channel:
-        await commands_channel.send(
+        message = await commands_channel.send(
             f"{interaction.user.mention} has invited {player.mention} to their party!",
             view=view
         )
+        view.message = message # Store message in view for on_timeout
         await interaction.followup.send(f"Party invite sent!", ephemeral=True)
     else:
         await interaction.followup.send("Could not find the commands channel to send the invite.", ephemeral=True)
@@ -2089,7 +1977,7 @@ async def party_leave(interaction: discord.Interaction):
 @bot.tree.command(name="party_kick", description="Kick a player from your party")
 @discord.app_commands.describe(player="The player to kick from your party")
 async def party_kick(interaction: discord.Interaction, player: discord.Member):
-    await interaction.response.defer()
+    await interaction.response.defer(ephemeral=True)
     
     leader_id = str(interaction.user.id)
     member_id = str(player.id)
@@ -2113,8 +2001,42 @@ async def party_kick(interaction: discord.Interaction, player: discord.Member):
     if commands_channel:
         await commands_channel.send(f"{player.mention} has been kicked from {interaction.user.mention}'s party.")
         
-    # Send confirmation to the party leader
     await interaction.followup.send(f"{player.display_name} has been kicked from your party.", ephemeral=True)
+
+@bot.tree.command(name="timeout_status", description="Check if you're currently timed out")
+async def timeout_status(interaction: discord.Interaction):
+    if is_player_timed_out(interaction.user.id):
+        remaining = get_timeout_remaining(interaction.user.id)
+        minutes = remaining // 60
+        seconds = remaining % 60
+        
+        embed = discord.Embed(
+            title="🚫 You are timed out",
+            description=f"You cannot join lobbies for leaving during an active session.\n\nTime remaining: {minutes}m {seconds}s",
+            color=discord.Color.red()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    else:
+        embed = discord.Embed(
+            title="✅ No timeout",
+            description="You are not currently timed out and can join lobbies normally.",
+            color=discord.Color.green()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@bot.tree.command(name="remove_timeout", description="Remove timeout from a player (Admin only)")
+@discord.app_commands.describe(player="The player to remove timeout from")
+@commands.has_permissions(administrator=True)
+async def remove_timeout(interaction: discord.Interaction, player: discord.Member):
+    user_id = str(player.id)
+    
+    if user_id in timeouts:
+        del timeouts[user_id]
+        save_timeouts()
+        await interaction.response.send_message(f"✅ Timeout removed for {player.display_name}", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"❌ {player.display_name} is not timed out", ephemeral=True)
+
 
 if __name__ == '__main__':
     bot.run(config.TOKEN)
