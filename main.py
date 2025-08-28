@@ -239,39 +239,46 @@ async def render_html_to_image(match_data, output_path, html_template='scoreboar
 
 tracemalloc.start()
 
-
-# ---------- Host Info View & Button ----------
-class HostInfoButton(Button):
-    def __init__(self, host_id: str, host_name: str):
+class HostInfoButton(discord.ui.Button):
+    def __init__(self, host_mention, host_name, host_id):
         super().__init__(
-            label=f"View {host_name}'s Profile",
-            style=discord.ButtonStyle.primary
+            style=discord.ButtonStyle.blurple,
+            label="Get Host Information",
+            emoji="ℹ️",
+            custom_id="host_info"
         )
-        self.host_id = host_id
-        self.host_name = host_name
-    
-    async def callback(self, interaction: discord.Interaction):
-        # Create embed with host profile info
-        embed = discord.Embed(
-            title=f"{self.host_name}'s Profile",
-            color=discord.Color.blue()
-        )
-        embed.add_field(name="Standoff2 ID", value=self.host_id, inline=False)
-        embed.set_footer(text="Profile data updated on match creation")
-        
-        # Send as ephemeral message
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-class HostInfoView(View):
-    def __init__(self, host_mention: str, host_name: str, host_id: str):
-        super().__init__(timeout=None)  # No timeout for the view
         self.host_mention = host_mention
         self.host_name = host_name
         self.host_id = host_id
-        
-        if host_id and host_id.isdigit():
-            self.add_item(HostInfoButton(host_id, host_name))
 
+    async def callback(self, interaction: discord.Interaction):
+        embed = discord.Embed(
+            title="🎮 Match Host Information",
+            color=discord.Color.blue()
+        )
+        
+        info_lines = [
+            f"👤 {self.host_mention}",
+            f"📝 Nickname: **{self.host_name}**"
+        ]
+        
+        if self.host_id and self.host_id.isdigit():
+            info_lines.extend([
+                f"🆔 **`{self.host_id}`**",
+                "",
+                "**Profile Link:**",
+                f"https://link.standoff2.com/en/profile/view/{self.host_id}"
+            ])
+        
+        embed.description = "\n".join(info_lines)
+        embed.set_footer(text="You can copy the ID by tapping it on mobile")
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+class HostInfoView(discord.ui.View):
+    def __init__(self, host_mention, host_name, host_id):
+        super().__init__(timeout=None)
+        self.add_item(HostInfoButton(host_mention, host_name, host_id))
 
 # ---------- Registration modal & view ----------
 class RegisterModal(discord.ui.Modal, title="Player Registration"):
