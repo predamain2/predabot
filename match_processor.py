@@ -188,6 +188,7 @@ def get_teams_from_match_data(
 ) -> tuple:
     """
     Analyzes match data to determine which team is which and detects missing players.
+    Ensures one-to-one player matching and drops unmatched players.
     """
     if not validate_teams(match_data):
         raise ValueError("Invalid team data")
@@ -201,6 +202,7 @@ def get_teams_from_match_data(
     if not original_match:
         raise ValueError(f"Could not find original match {match_id}")
 
+    # Build expected rosters
     team1_players = {}
     team2_players = {}
     for discord_id in original_match["team1"]:
@@ -215,41 +217,27 @@ def get_teams_from_match_data(
             team2_players[stored_nick] = {"id": discord_id, "data": player_data[discord_id]}
 
     all_expected_names = list(team1_players.keys()) + list(team2_players.keys())
+    used_expected = set()
 
-    for player in match_data["ct_team"]:
-        for expected_name in all_expected_names:
-            if match_player_name(player["name"], expected_name):
-                player["name"] = expected_name
-                break
-    for player in match_data["t_team"]:
-        for expected_name in all_expected_names:
-            if match_player_name(player["name"], expected_name):
-                player["name"] = expected_name
-                break
+    # Match players uniquely
+    for team_key in ["ct_team", "t_team"]:
+        matched_players = []
+        for player in match_data[team_key]:
+            matched = False
+            for expected_name in all_expected_names:
+                if expected_name in used_expected:
+                    continue
+                if match_player_name(player["name"], expected_name):
+                    player["name"] = expected_name
+                    used_expected.add(expected_name)
+                    matched_players.append(player)
+                    matched = True
+                    break
+            if not matched:
+                print(f"⚠️ Dropping unmatched player: {player['name']}")
+        match_data[team_key] = matched_players  # keep only matched players
 
-    ct_team_players = match_data["ct_team"]
-    t_team_players = match_data["t_team"]
-
-    ct_to_remove = []
-    t_to_remove = []
-    for player in match_data["ct_team"]:
-        if not any(
-            match_player_name(player["name"], stored_nick)
-            for stored_nick in team1_players.keys() | team2_players.keys()
-        ):
-            ct_to_remove.append(player)
-    for player in match_data["t_team"]:
-        if not any(
-            match_player_name(player["name"], stored_nick)
-            for stored_nick in team1_players.keys() | team2_players.keys()
-        ):
-            t_to_remove.append(player)
-
-    for player in ct_to_remove:
-        match_data["ct_team"].remove(player)
-    for player in t_to_remove:
-        match_data["t_team"].remove(player)
-
+    # Decide CT vs T
     ct_team_players = {p["name"].lower(): p for p in match_data["ct_team"]}
     t_team_players = {p["name"].lower(): p for p in match_data["t_team"]}
 
@@ -260,9 +248,10 @@ def get_teams_from_match_data(
     ct_score, t_score = map(int, match_data["score"].split("-"))
     winners_were_ct = ct_score > t_score
 
+    # Add absent players
     ct_expected = team1_players if ct_is_team1 else team2_players
     for stored_nick, player_info in ct_expected.items():
-        if not any(match_player_name(stored_nick, p["name"]) for p in match_data["ct_team"]):
+        if stored_nick not in (p["name"] for p in match_data["ct_team"]):
             match_data["ct_team"].append(
                 {
                     "name": stored_nick,
@@ -283,7 +272,7 @@ def get_teams_from_match_data(
 
     t_expected = team2_players if ct_is_team1 else team1_players
     for stored_nick, player_info in t_expected.items():
-        if not any(match_player_name(stored_nick, p["name"]) for p in match_data["t_team"]):
+        if stored_nick not in (p["name"] for p in match_data["t_team"]):
             match_data["t_team"].append(
                 {
                     "name": stored_nick,
