@@ -14,6 +14,10 @@ def calculate_rating(kills: int, deaths: int, assists: int, rounds_played: int) 
     if rounds_played == 0:
         return 0.0
 
+    # Ensure division by zero doesn't occur if rounds_played is somehow negative (validation should prevent this)
+    if rounds_played <= 0:
+        return 0.0
+
     kd_impact = (kills - deaths) / rounds_played
     kill_impact = kills / rounds_played
     survival_impact = (rounds_played - deaths) / rounds_played
@@ -27,33 +31,6 @@ def calculate_rating(kills: int, deaths: int, assists: int, rounds_played: int) 
         + (assist_factor * 0.1)
     )
     return round(max(0, rating), 2)
-
-
-def match_player_name(parsed_name: str, expected_name: str, threshold: float = 0.7) -> bool:
-    """
-    Leniently match parsed scoreboard names with expected player names.
-    - Ignores symbols and case
-    - Allows substring matches
-    - Allows fuzzy similarity (>= threshold)
-    """
-
-    def clean_name(name: str) -> str:
-        return re.sub(r"[^a-z0-9]", "", name.lower())
-
-    p = clean_name(parsed_name)
-    e = clean_name(expected_name)
-
-    if not p or not e:
-        return False
-
-    if p == e:
-        return True
-    if e in p or p in e:
-        return True
-    if SequenceMatcher(None, p, e).ratio() >= threshold:
-        return True
-
-    return False
 
 
 def validate_teams(match_data: dict) -> bool:
@@ -182,6 +159,54 @@ def check_for_leavers(team: list, player_data: dict, is_winning_team: bool):
                 f"0 kills, {player.get('deaths')} deaths"
             )
 
+def _build_expected_rosters(original_match: dict, player_data: dict) -> tuple[dict, dict]:
+    """Builds dictionaries of expected players for each team from the match data."""
+    team1_players = {}
+    team2_players = {}
+    for team_key, player_dict in [("team1", team1_players), ("team2", team2_players)]:
+        for discord_id in original_match[team_key]:
+            discord_id = str(discord_id)
+            if discord_id in player_data:
+                nick = player_data[discord_id]["nick"]
+                player_dict[nick] = {"id": discord_id, "data": player_data[discord_id]}
+    return team1_players, team2_players
+
+def _find_best_player_matches(
+    scoreboard_players: list[dict], expected_names: list[str]
+) -> dict[str, str]:
+    """
+    Finds the best unique matches between scoreboard players and expected players.
+    This function calculates a similarity score for every possible pairing and
+    greedily selects the best matches first to avoid incorrect assignments.
+    """
+    potential_matches = []
+    threshold = getattr(config, 'FUZZY_MATCH_THRESHOLD', 0.7)
+
+    # 1. Calculate a score for every possible scoreboard-to-expected player pair
+    for s_player in scoreboard_players:
+        for e_name in expected_names:
+            ratio = SequenceMatcher(
+                None, s_player["name"].lower(), e_name.lower()
+            ).ratio()
+            if ratio >= threshold:
+                potential_matches.append((ratio, s_player["name"], e_name))
+
+    # 2. Sort all potential matches from highest score (best match) to lowest
+    potential_matches.sort(key=lambda x: x[0], reverse=True)
+
+    best_matches = {}
+    used_scoreboard_names = set()
+    used_expected_names = set()
+
+    # 3. Iterate through the sorted list and lock in the best available matches
+    for _score, s_name, e_name in potential_matches:
+        if s_name not in used_scoreboard_names and e_name not in used_expected_names:
+            best_matches[s_name] = e_name
+            used_scoreboard_names.add(s_name)
+            used_expected_names.add(e_name)
+
+    return best_matches
+
 
 def get_teams_from_match_data(
     match_id: int, match_data: dict, player_data: dict
@@ -203,44 +228,29 @@ def get_teams_from_match_data(
         raise ValueError(f"Could not find original match {match_id}")
 
     # Build expected rosters
-    team1_players = {}
-    team2_players = {}
-    for discord_id in original_match["team1"]:
-        discord_id = str(discord_id)
-        if discord_id in player_data:
-            stored_nick = player_data[discord_id]["nick"]
-            team1_players[stored_nick] = {"id": discord_id, "data": player_data[discord_id]}
-    for discord_id in original_match["team2"]:
-        discord_id = str(discord_id)
-        if discord_id in player_data:
-            stored_nick = player_data[discord_id]["nick"]
-            team2_players[stored_nick] = {"id": discord_id, "data": player_data[discord_id]}
-
+    team1_players, team2_players = _build_expected_rosters(original_match, player_data)
     all_expected_names = list(team1_players.keys()) + list(team2_players.keys())
-    used_expected = set()
 
-    # Match players uniquely
+    # --- Start of new matching logic ---
+    # Find the best possible unique matches across both teams
+    all_scoreboard_players = match_data["ct_team"] + match_data["t_team"]
+    best_matches = _find_best_player_matches(all_scoreboard_players, all_expected_names)
+
+    # Update player names to their canonical nick & drop unmatched players
     for team_key in ["ct_team", "t_team"]:
-        matched_players = []
+        updated_team = []
         for player in match_data[team_key]:
-            matched = False
-            for expected_name in all_expected_names:
-                if expected_name in used_expected:
-                    continue
-                if match_player_name(player["name"], expected_name):
-                    player["name"] = expected_name
-                    used_expected.add(expected_name)
-                    matched_players.append(player)
-                    matched = True
-                    break
-            if not matched:
+            if player["name"] in best_matches:
+                player["name"] = best_matches[player["name"]]  # Standardize name
+                updated_team.append(player)
+            else:
                 print(f"⚠️ Dropping unmatched player: {player['name']}")
-        match_data[team_key] = matched_players  # keep only matched players
+        match_data[team_key] = updated_team
+    # --- End of new matching logic ---
 
     # Decide CT vs T
     ct_team_players = {p["name"].lower(): p for p in match_data["ct_team"]}
-    t_team_players = {p["name"].lower(): p for p in match_data["t_team"]}
-
+    
     ct_matches_team1 = len(set(ct_team_players.keys()) & set(n.lower() for n in team1_players))
     ct_matches_team2 = len(set(ct_team_players.keys()) & set(n.lower() for n in team2_players))
     ct_is_team1 = ct_matches_team1 > ct_matches_team2
