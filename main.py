@@ -1074,8 +1074,18 @@ async def on_message(message: discord.Message):
         return
 
     # Process match data with missing players
-    from match_processor import get_teams_from_match_data, calculate_rating
+    from match_processor import get_teams_from_match_data, calculate_rating, validate_teams
     try:
+        if not validate_teams(match_data):  # Add validation check here
+            active_submissions.discard(match_id)  # Free up the match ID
+            del pending_upload[message.author.id]
+            await loading_msg.edit(embed=discord.Embed(
+                title="Error",
+                description="❌ Match submission rejected: At least one player must be present on each team.",
+                color=discord.Color.red()
+            ))
+            return
+
         winning_team, losing_team, winners_were_ct = get_teams_from_match_data(match_id, match_data, player_data)
         
         # Get the original match data for additional info
@@ -1286,8 +1296,9 @@ async def on_message(message: discord.Message):
     del pending_upload[message.author.id]
 
 
-    # FIX: Use the correct game results channel ID
+    # Channel IDs for results
     game_results_id = 1406361378792407253
+    staff_results_id = 1411756785383243847
     
     # Update loading message with completion
     try:
@@ -1329,17 +1340,20 @@ async def on_message(message: discord.Message):
     if general_cog:
         await general_cog.update_leaderboard_if_needed(message.guild)
 
-    dest = message.guild.get_channel(game_results_id)
-    if dest:
-        output_file = f"scoreboard_{match_id}.png"
+    # Send to both channels
+    from staff_controls import StaffMatchControls
+    
+    for channel_id in [game_results_id, staff_results_id]:
+        dest = message.guild.get_channel(channel_id)
+        if not dest:
+            continue
+            
         try:
-            # try render HTML -> PNG using template scoreboard.html
+            # Generate and send scoreboard image
+            output_file = f"scoreboard_{match_id}.png"
             await render_html_to_image(match_data, output_file)
-            await dest.send(file=discord.File(output_file))
-        except Exception as e:
-            await message.channel.send(f"⚠️ Failed to render scoreboard image: {e}")
-        
-        try:
+            scoreboard_msg = await dest.send(file=discord.File(output_file))
+            
             # Create the MVP string with kills
             mvp_string = f"{mvp_player} ({max_kills} kills) 🏆" if mvp_player else "None"
             
@@ -1350,6 +1364,7 @@ async def on_message(message: discord.Message):
                     f"**Winner:** {'CT' if ct_won else 'T'}\n"
                     f"**Score:** {match_data.get('score')}\n"
                     f"**MVP:** {mvp_string} (+5 ELO bonus)\n"
+                    f"**Submitted by:** {message.author.mention}\n"
                 ),
                 color=discord.Color.blue()
             )
@@ -1391,11 +1406,23 @@ async def on_message(message: discord.Message):
                 value="\n".join(f"{p['name']} (ELO: {get_elo_for_name(p['name'])}) | K:{p['kills']} A:{p['assists']} D:{p['deaths']}" for p in match_data.get("losing_team", [])) or "—",
                 inline=False
             )
-            embed.set_image(url=attachment.url)
-            embed.set_footer(text="Stats updated automatically.")
-            await dest.send(embed=embed)
+            
+            # Set the image to the uploaded scoreboard
+            embed.set_image(url=scoreboard_msg.attachments[0].url)
+            
+            # Different footer for staff channel
+            if channel_id == staff_results_id:
+                embed.set_footer(text="Use the buttons below to edit match stats.")
+                view = StaffMatchControls(match_id, match_data, bot)
+                await dest.send(embed=embed, view=view)
+            else:
+                embed.set_footer(text="Stats updated automatically.")
+                await dest.send(embed=embed)
+                
         except Exception as e:
-            await message.channel.send(f"⚠️ Failed to deliver results embed: {e}")
+            error_msg = f"⚠️ Failed to send match results to {dest.mention}: {str(e)}"
+            print(error_msg)  # Log the error
+            await message.channel.send(error_msg)
 
 # =========================================================
 #                       EVENTS

@@ -39,6 +39,7 @@ def validate_teams(match_data: dict) -> bool:
     1. Maximum 5 players per team
     2. No duplicate names on either team
     3. No player can be on both teams
+    4. At least one present player per team (not marked as absent)
     """
     ct_team = match_data["ct_team"]
     t_team = match_data["t_team"]
@@ -48,6 +49,18 @@ def validate_teams(match_data: dict) -> bool:
         return False
     if len(t_team) > 5:
         print(f"Error: T team has too many players ({len(t_team)})")
+        return False
+
+    # Check for at least one present player per team
+    ct_present = any(not (p.get("kills", 0) == 0 and p.get("deaths", 0) >= 10) for p in ct_team)
+    t_present = any(not (p.get("kills", 0) == 0 and p.get("deaths", 0) >= 10) for p in t_team)
+    
+    if not ct_present:
+        print("Error: CT team has no present players (all marked as absent)")
+        raise ValueError("Match submission rejected: CT team has no present players")
+    if not t_present:
+        print("Error: T team has no present players (all marked as absent)")
+        raise ValueError("Match submission rejected: T team has no present players")
         return False
 
     ct_names = [p["name"].lower() for p in ct_team]
