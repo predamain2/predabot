@@ -1349,10 +1349,9 @@ async def on_message(message: discord.Message):
             continue
             
         try:
-            # Generate and send scoreboard image
+            # Generate scoreboard image
             output_file = f"scoreboard_{match_id}.png"
             await render_html_to_image(match_data, output_file)
-            scoreboard_msg = await dest.send(file=discord.File(output_file))
             
             # Create the MVP string with kills
             mvp_string = f"{mvp_player} ({max_kills} kills) 🏆" if mvp_player else "None"
@@ -1407,17 +1406,19 @@ async def on_message(message: discord.Message):
                 inline=False
             )
             
-            # Set the image to the uploaded scoreboard
-            embed.set_image(url=scoreboard_msg.attachments[0].url)
+            # Create file object for the scoreboard
+            file = discord.File(output_file)
             
             # Different footer for staff channel
             if channel_id == staff_results_id:
                 embed.set_footer(text="Use the buttons below to edit match stats.")
                 view = StaffMatchControls(match_id, match_data, bot)
-                await dest.send(embed=embed, view=view)
+                embed.set_image(url="attachment://" + output_file)
+                await dest.send(file=file, embed=embed, view=view)
             else:
                 embed.set_footer(text="Stats updated automatically.")
-                await dest.send(embed=embed)
+                embed.set_image(url="attachment://" + output_file)
+                await dest.send(file=file, embed=embed)
                 
         except Exception as e:
             error_msg = f"⚠️ Failed to send match results to {dest.mention}: {str(e)}"
