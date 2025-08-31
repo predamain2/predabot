@@ -1485,24 +1485,33 @@ async def on_message(message: discord.Message):
 #                       EVENTS
 # =========================================================
 
+from ban_checker import check_banned_players
+
 @bot.event
 async def on_ready():
     global timeouts
     timeouts = load_timeouts()
-
     print('Bot ready', bot.user)
-    print("Starting bot setup...")
     
-    # Check for banned players on startup
-    from ban_checker import check_banned_players
+    # Start ban check in background
     try:
         guild = bot.get_guild(config.GUILD_ID)
         if guild:
-            removed_players = await check_banned_players(guild)
-            if removed_players:
-                print(f"Removed {len(removed_players)} banned players from players.json")
-                for player_id in removed_players:
-                    print(f"- Removed banned player: {player_id}")
+            print("Starting banned players check in background...")
+            bot.loop.create_task(_check_bans_and_report(guild))
+    except Exception as e:
+        print(f"Error initiating ban check: {e}")
+    
+    print("Bot setup complete!")
+
+async def _check_bans_and_report(guild):
+    """Background task to check bans and report results"""
+    try:
+        removed_players = await check_banned_players(guild)
+        if removed_players:
+            print(f"Removed {len(removed_players)} banned players from players.json")
+            for player_id in removed_players:
+                print(f"- Removed banned player: {player_id}")
     except Exception as e:
         print(f"Error during startup ban check: {e}")
 
