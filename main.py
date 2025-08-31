@@ -111,11 +111,31 @@ def get_timeout_remaining(user_id):
         return int(timeout_end - current_time)
     return 0
 
-def add_timeout(user_id, duration=TIMEOUT_DURATION):
-    """Add a timeout for a user"""
+async def add_timeout(user_id, duration=TIMEOUT_DURATION, reason="leaving during an active session"):
+    """Add a timeout for a user and send notification"""
     timeout_end = time.time() + duration
     timeouts[str(user_id)] = timeout_end
     save_timeouts()
+
+    # Send notification to the timeout channel
+    try:
+        channel = bot.get_channel(config.TIMEOUT_NOTIFICATION_CHANNEL_ID)
+        if channel:
+            minutes = duration // 60
+            seconds = duration % 60
+            end_time = datetime.fromtimestamp(timeout_end)
+            
+            embed = discord.Embed(
+                title="🚫 Player Timeout",
+                description=f"<@{user_id}> has been timed out for {reason}.",
+                color=discord.Color.red()
+            )
+            embed.add_field(name="Duration", value=f"{minutes}m {seconds}s", inline=True)
+            embed.add_field(name="Ends At", value=end_time.strftime("%H:%M:%S"), inline=True)
+            await channel.send(embed=embed)
+    except Exception as e:
+        print(f"Failed to send timeout notification: {e}")
+
     return timeout_end
 
 def key_of(m):
@@ -308,7 +328,8 @@ class RegisterModal(discord.ui.Modal, title="Player Registration"):
 
         # Validate that ID contains only numbers
         if not pid_value.isdigit():
-            await interaction.followup.send("❌ Player ID must contain only numbers.")
+            await interaction.followup.send("❌ Player ID must contain only numbers.", ephemeral=True
+            )
             return
 
         # Prevent duplicate nick/id registration across different users
@@ -317,7 +338,7 @@ class RegisterModal(discord.ui.Modal, title="Player Registration"):
                 # Allow same user to update; block others
                 if k != str(member.id):
                     await interaction.followup.send(
-                        "❌ That nickname or ID is already registered by another user."
+                        "❌ That nickname or ID is already registered by another user.", ephemeral=True
                     )
                     return
 
@@ -395,10 +416,24 @@ class DraftView(View):
 
         opts = []
         for m in st['waiting']:
-            label = getattr(m, "display_name", str(key_of(m)))
             p = player_data.get(key_of(m)) or ensure_player(m)
-            desc = f"Lvl {p['level']} | ELO {p['elo']} | W{p.get('wins',0)}-L{p.get('losses',0)}"
-            opts.append(discord.SelectOption(label=label[:100], description=desc[:100], value=str(key_of(m))))
+            label = getattr(m, "display_name", str(key_of(m)))
+            
+            # Get level emoji safely
+            level = p.get('level', 0) if p else 0
+            level_emoji = getattr(config, 'LEVEL_ROLES', {}).get(level, '⭐')
+            
+            # Calculate winrate only from existing data
+            total_games = p.get('wins', 0) + p.get('losses', 0)
+            winrate = f"{round((p.get('wins', 0) / max(total_games, 1)) * 100)}%" if total_games > 0 else "N/A"
+            
+            desc = f"WR: {winrate}"
+            opts.append(discord.SelectOption(
+                label=label[:100],
+                description=desc[:100],
+                value=str(key_of(m)),
+                emoji=level_emoji
+            ))
 
         if not opts:
             return
@@ -566,12 +601,20 @@ def build_roster_embed(st):
     pick_mention = getattr(pick_turn, "mention", f"<@{id_of(pick_turn)}>")
     match_id = st.get('match_id', '—')
     e.description = f"Match ID: `{match_id}`\nNext to pick: {pick_mention}"
-    t1 = "\n".join(label_for(m) for m in st['team1']) or "—"
-    t2 = "\n".join(label_for(m) for m in st['team2']) or "—"
-    w = "\n".join(label_for(m) for m in st['waiting']) or "—"
+    
+    def format_player(m, is_captain=False):
+        p = player_data.get(key_of(m))
+        # Get level emoji safely
+        level = p.get('level', 0) if p else 0
+        level_emoji = getattr(config, 'LEVEL_ROLES', {}).get(level, '⭐')
+        name = getattr(m, "display_name", str(key_of(m)))
+        return f"{level_emoji} {name}" + (" 👑" if is_captain else "")
+    
+    t1 = "\n".join(format_player(m, m == st['captain_ct']) for m in st['team1']) or "—"
+    t2 = "\n".join(format_player(m, m == st['captain_t']) for m in st['team2']) or "—"
+    
     e.add_field(name="Team 1 (CT)", value=t1, inline=True)
     e.add_field(name="Team 2 (T)", value=t2, inline=True)
-    e.add_field(name="Available players", value=w, inline=False)
     return e
 
 async def announce_teams_final(channel: discord.TextChannel, match_id, chosen_map, st):
@@ -802,17 +845,23 @@ async def start_picking_stage(channel, member_list):
             if member in waiting:
                 waiting.remove(member)
     
-    # If captain2 is a party leader, automatically assign their party members to team2
-    if str(getattr(captain2, 'id', captain2)) in party_members:
-        party_members_list = party_members[str(getattr(captain2, 'id', captain2))]
-        team2.extend(party_members_list)
-        # Remove these members from waiting list as they're now assigned
-        for member in party_members_list:
-            if member in waiting:
-                waiting.remove(member)
-    
+    # Assign party members to teams, ensuring balance
+    for leader, members in party_members.items():
+        if str(getattr(captain1, 'id', captain1)) == leader:
+            for m in members:
+                if m not in team1 and m not in team2:
+                    team1.append(m)
+        elif str(getattr(captain2, 'id', captain2)) == leader:
+            for m in members:
+                if m not in team2 and m not in team1:
+                    team2.append(m)
+    # If teams are unbalanced, move extra party members to waiting
+    while len(team1) > 5:
+        waiting.append(team1.pop())
+    while len(team2) > 5:
+        waiting.append(team2.pop())
+
     st = {
-        # 'match_id' will be assigned when the match is created, not here
         'team1': team1,
         'team2': team2,
         'waiting': waiting,
@@ -1419,6 +1468,13 @@ async def on_message(message: discord.Message):
                 embed.set_footer(text="Stats updated automatically.")
                 embed.set_image(url="attachment://" + output_file)
                 await dest.send(file=file, embed=embed)
+            
+            # Clean up the PNG file after sending
+            import os
+            try:
+                os.remove(output_file)
+            except OSError:
+                pass
                 
         except Exception as e:
             error_msg = f"⚠️ Failed to send match results to {dest.mention}: {str(e)}"
@@ -1435,8 +1491,26 @@ async def on_ready():
     timeouts = load_timeouts()
 
     print('Bot ready', bot.user)
-
     print("Starting bot setup...")
+    
+    # Check for banned players on startup
+    from ban_checker import check_banned_players
+    try:
+        guild = bot.get_guild(config.GUILD_ID)
+        if guild:
+            removed_players = await check_banned_players(guild)
+            if removed_players:
+                print(f"Removed {len(removed_players)} banned players from players.json")
+                for player_id in removed_players:
+                    print(f"- Removed banned player: {player_id}")
+    except Exception as e:
+        print(f"Error during startup ban check: {e}")
+
+@bot.event
+async def on_member_ban(guild, user):
+    """Handle player ban by removing them from players.json"""
+    from player_validator import handle_player_ban
+    await handle_player_ban(str(user.id), guild)
     
     # Load all cogs/extensions first
     try:
@@ -1550,18 +1624,22 @@ async def on_voice_state_update(member, before, after):
                     return
 
     # When someone joins, check if they're timed out first
-    if moved_into_lobby:
-        # Check if player is timed out
-        if is_player_timed_out(member.id):
-            remaining = get_timeout_remaining(member.id)
-            minutes = remaining // 60
-            seconds = remaining % 60
+    if moved_into_lobby and is_player_timed_out(member.id):
+        remaining = get_timeout_remaining(member.id)
+        minutes = remaining // 60
+        seconds = remaining % 60
+        current_time = time.time()
+        
+        # First try to remove them from the lobby
+        try:
+            await member.move_to(None)
+        except discord.Forbidden:
+            pass  # Bot doesn't have permission to move member
             
-            try:
-                # Move them out of the lobby
-                await member.move_to(None)
-                
-                # Send timeout message
+        # Handle timeout messages with rate limiting
+        try:
+            last_timeout_msg = getattr(member, '_last_timeout_msg', 0)
+            if current_time - last_timeout_msg > 30:  # Only send message every 30 seconds
                 text_ch = guild.get_channel(config.LOBBY_TEXT_CHANNEL_ID)
                 if text_ch:
                     embed = discord.Embed(
@@ -1570,23 +1648,25 @@ async def on_voice_state_update(member, before, after):
                         color=discord.Color.red()
                     )
                     await text_ch.send(embed=embed, delete_after=10)
-                    
-                # Try to DM the user
-                try:
-                    dm_embed = discord.Embed(
-                        title="🚫 Lobby Timeout",
-                        description=f"You are timed out from joining lobbies for leaving during an active session.\n\nTime remaining: {minutes}m {seconds}s",
-                        color=discord.Color.red()
-                    )
-                    await member.send(embed=dm_embed)
-                except:
-                    pass  # User might have DMs disabled
-                    
-                return  # Don't process normal lobby join logic
-                
-            except discord.Forbidden:
-                # Bot doesn't have permission to move member
-                pass
+                    setattr(member, '_last_timeout_msg', current_time)
+        except Exception as e:
+            print(f"Failed to send timeout message: {e}")
+            
+        # Handle DM with rate limiting
+        try:
+            last_timeout_dm = getattr(member, '_last_timeout_dm', 0)
+            if current_time - last_timeout_dm > 300:  # Only DM every 5 minutes
+                dm_embed = discord.Embed(
+                    title="🚫 Lobby Timeout",
+                    description=f"You are timed out from joining lobbies for leaving during an active session.\n\nTime remaining: {minutes}m {seconds}s",
+                    color=discord.Color.red()
+                )
+                await member.send(embed=dm_embed)
+                setattr(member, '_last_timeout_dm', current_time)
+        except Exception:
+            pass  # Failed to send DM
+            
+        return  # Skip normal lobby join logic
         
         # Normal lobby join logic (only if not timed out)
         lobby = after.channel
@@ -1736,44 +1816,7 @@ class EditProfileModal(discord.ui.Modal, title="Edit Profile"):
             
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-@bot.tree.command(name="sync_nicknames", description="Update all registered players' Discord nicknames to match their registered nicknames")
-@commands.has_permissions(administrator=True)
-async def sync_nicknames(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
-    
-    guild = interaction.guild
-    if not guild:
-        await interaction.followup.send("❌ This command can only be used in a server.", ephemeral=True)
-        return
-        
-    updated = 0
-    failed = 0
-    skipped_admins = 0
-    
-    for user_id, data in player_data.items():
-        member = guild.get_member(int(user_id))
-        if member:
-            # Skip administrators - they need to update their nicknames manually
-            if member.guild_permissions.administrator:
-                skipped_admins += 1
-                continue
-                
-            try:
-                await member.edit(nick=data["nick"])
-                updated += 1
-            except discord.errors.Forbidden:
-                failed += 1
-            except Exception as e:
-                print(f"Failed to update nickname for {member.name}: {e}")
-                failed += 1
-                
-    await interaction.followup.send(
-        f"✅ Nickname sync complete:\n"
-        f"- {updated} nicknames updated successfully\n"
-        f"- {failed} updates failed\n"
-        f"- {skipped_admins} administrators skipped (must update manually)",
-        ephemeral=True
-    )
+
 
 @bot.tree.command(name="edit_profile", description="Edit your nickname and Standoff2 ID")
 async def edit_profile(interaction: discord.Interaction):
@@ -2015,28 +2058,36 @@ async def party_kick(interaction: discord.Interaction, player: discord.Member):
     await interaction.response.defer(ephemeral=True)
     
     leader_id = str(interaction.user.id)
-    member_id = str(player.id)
-    
-    # Check if the command user is a party leader
     if leader_id not in party_data:
         await interaction.followup.send("You are not a party leader.", ephemeral=True)
         return
-        
-    # Check if the player is in the party
-    if member_id not in party_data[leader_id]['members']:
-        await interaction.followup.send("This player is not in your party.", ephemeral=True)
+    members = party_data[leader_id]['members']
+    to_kick = [m for m in members if m != leader_id]
+    if not to_kick:
+        await interaction.followup.send("No invited member to kick.", ephemeral=True)
         return
-        
-    # Remove the player from the party
-    party_data[leader_id]['members'].remove(member_id)
+    kicked_id = to_kick[0]
+    party_data[leader_id]['members'].remove(kicked_id)
     save_parties()
-    
-    # Send notification to the commands channel
     commands_channel = interaction.guild.get_channel(COMMANDS_CHANNEL_ID)
     if commands_channel:
-        await commands_channel.send(f"{player.mention} has been kicked from {interaction.user.mention}'s party.")
-        
-    await interaction.followup.send(f"{player.display_name} has been kicked from your party.", ephemeral=True)
+        await commands_channel.send(f"<@{kicked_id}> has been kicked from <@{leader_id}>'s party.")
+    await interaction.followup.send(f"Kicked <@{kicked_id}> from your party.", ephemeral=True)
+@bot.tree.command(name="timeout", description="Timeout a user from the voice channel")
+@commands.has_permissions(administrator=True)
+@discord.app_commands.describe(user="The user to timeout", minutes="Timeout duration in minutes")
+async def timeout(interaction: discord.Interaction, user: discord.Member, minutes: int = 5):
+    await interaction.response.defer(ephemeral=True)
+    timeout_end = time.time() + minutes * 60
+    timeouts[str(user.id)] = timeout_end
+    save_timeouts()
+    # Move user out of voice channel if present
+    if user.voice and user.voice.channel:
+        try:
+            await user.move_to(None)
+        except Exception:
+            pass
+    await interaction.followup.send(f"🚫 {user.mention} has been timed out for {minutes} minutes.", ephemeral=True)
 
 @bot.tree.command(name="timeout_status", description="Check if you're currently timed out")
 async def timeout_status(interaction: discord.Interaction):

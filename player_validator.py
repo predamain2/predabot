@@ -47,6 +47,38 @@ def load_players():
             return json.load(f)
     return {}
 
+async def handle_player_ban(user_id: str, guild = None):
+    """Handle player ban by removing them from players.json"""
+    players_file = Path("players.json")
+    
+    if not players_file.exists():
+        return False
+    
+    try:
+        players = load_players()
+        
+        # Remove the player if they exist
+        if str(user_id) in players:
+            del players[str(user_id)]
+            
+            # Save the updated players file
+            with open(players_file, 'w') as f:
+                json.dump(players, f, indent=2)
+                
+            # Try to update their nickname if possible
+            if guild:
+                try:
+                    member = await guild.fetch_member(int(user_id))
+                    if member:
+                        await member.edit(nick=None)
+                except:
+                    pass  # Member might not be in the server anymore
+            
+            return True
+    except Exception as e:
+        print(f"Error handling player ban: {e}")
+        return False
+    
 def load_matches():
     matches_file = Path("matches.json")
     if matches_file.exists():

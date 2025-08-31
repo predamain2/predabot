@@ -312,17 +312,49 @@ class MapBan(commands.Cog):
         """
         st = self.active.get(channel_id)
         host_obj = None
-        if st:
-            host_obj = st.get("captain_ct")
         host_int = None
-        if host_obj is not None:
-            try:
-                host_int = int(getattr(host_obj, "id", host_obj))
-            except Exception:
+        
+        if st:
+            def get_player_id(player):
+                """Helper function to get a player's registered ID"""
                 try:
-                    host_int = int(host_obj)
+                    player_int = int(getattr(player, "id", player))
+                    with open("players.json", 'r') as f:
+                        players = json.load(f)
+                    player_data = players.get(str(player_int))
+                    if player_data and player_data.get("id"):
+                        return player_int
+                    return None
+                except:
+                    return None
+            
+            # First try both captains
+            captain_ct = st.get("captain_ct")
+            captain_t = st.get("captain_t")
+            
+            # Check CT captain
+            if captain_ct and get_player_id(captain_ct):
+                host_obj = captain_ct
+            # Check T captain
+            elif captain_t and get_player_id(captain_t):
+                host_obj = captain_t
+            else:
+                # Try to find any player with a registered ID from either team
+                all_players = st.get("team1", []) + st.get("team2", [])
+                for player in all_players:
+                    if player_id := get_player_id(player):
+                        host_obj = player
+                        break
+            
+            # Get the host's integer ID
+            if host_obj is not None:
+                try:
+                    host_int = int(getattr(host_obj, "id", host_obj))
                 except Exception:
-                    host_int = None
+                    try:
+                        host_int = int(host_obj)
+                    except Exception:
+                        host_int = None
 
         # load registered data
         reg_id = None

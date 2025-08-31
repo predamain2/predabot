@@ -5,73 +5,89 @@ from pathlib import Path
 import asyncio
 
 class EditMatchModal(Modal):
-    def __init__(self, match_id, player_name, current_kills, current_assists, current_deaths):
+    def __init__(self, match_id, player_name, current_kills, current_assists, current_deaths, current_elo):
         super().__init__(title=f"Edit Stats for {player_name}")
         self.match_id = match_id
         self.player_name = player_name
-        
-        self.kills = TextInput(
-            label="Kills",
-            default=str(current_kills),
-            required=True,
-            min_length=1,
-            max_length=3
-        )
-        self.assists = TextInput(
-            label="Assists",
-            default=str(current_assists),
-            required=True,
-            min_length=1,
-            max_length=3
-        )
-        self.deaths = TextInput(
-            label="Deaths",
-            default=str(current_deaths),
-            required=True,
-            min_length=1,
-            max_length=3
-        )
-        
+        self.kills = TextInput(label="Kills", default=str(current_kills), required=True, min_length=1, max_length=3)
+        self.assists = TextInput(label="Assists", default=str(current_assists), required=True, min_length=1, max_length=3)
+        self.deaths = TextInput(label="Deaths", default=str(current_deaths), required=True, min_length=1, max_length=3)
+        self.elo = TextInput(label="ELO", default=str(current_elo), required=True, min_length=1, max_length=5)
         self.add_item(self.kills)
         self.add_item(self.assists)
         self.add_item(self.deaths)
+        self.add_item(self.elo)
         
     async def on_submit(self, interaction: discord.Interaction):
+        # Confirmation step before saving
+        confirm_view = ConfirmEditView(self.match_id, self.player_name, self.kills.value, self.assists.value, self.deaths.value, self.elo.value)
+        await interaction.response.send_message(f"Confirm changes for {self.player_name}?", view=confirm_view, ephemeral=True)
+
+class ConfirmEditView(View):
+    def __init__(self, match_id, player_name, kills, assists, deaths, elo):
+        super().__init__(timeout=60)
+        self.match_id = match_id
+        self.player_name = player_name
+        self.kills = kills
+        self.assists = assists
+        self.deaths = deaths
+        self.elo = elo
+
+    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: Button):
         try:
-            # Load current results
             with open("results.json", "r") as f:
                 results = json.load(f)
-                
             match_data = results[self.match_id]
-            
-            # Update player stats in both teams
             updated = False
             for team in ["winning_team", "losing_team"]:
                 for player in match_data[team]:
                     if player["name"] == self.player_name:
-                        player["kills"] = int(self.kills.value)
-                        player["assists"] = int(self.assists.value)
-                        player["deaths"] = int(self.deaths.value)
+                        player["kills"] = int(self.kills)
+                        player["assists"] = int(self.assists)
+                        player["deaths"] = int(self.deaths)
+                        player["elo"] = int(self.elo)
                         updated = True
                         break
                 if updated:
                     break
-                    
-            # Save updated results
             with open("results.json", "w") as f:
                 json.dump(results, f, indent=2)
-                
-            # Trigger a match reprocess and embed update
-            await interaction.response.send_message(f"Updated stats for {self.player_name}", ephemeral=True)
-            
-            # Note: The calling code will handle the embed update
-            
-        except ValueError as e:
-            await interaction.response.send_message(f"Invalid input: {str(e)}", ephemeral=True)
+            await interaction.response.send_message(f"✅ Changes saved for {self.player_name}.", ephemeral=True)
+            # Optionally trigger embed update here
         except Exception as e:
             await interaction.response.send_message(f"Error: {str(e)}", ephemeral=True)
 
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger)
+    async def cancel(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.send_message("Edit cancelled.", ephemeral=True)
+
 class StaffMatchControls(View):
+    @discord.ui.button(label="Revert Scoreboard", style=discord.ButtonStyle.danger)
+    async def revert_scoreboard(self, interaction: discord.Interaction, button: Button):
+        # Remove match from results.json and delete embeds/images from both channels
+        try:
+            with open("results.json", "r") as f:
+                results = json.load(f)
+            match_data = results.get(self.match_id)
+            if not match_data:
+                await interaction.response.send_message("Match not found in database.", ephemeral=True)
+                return
+            # Optionally revert ELO for all players in this match
+            for team in ["winning_team", "losing_team"]:
+                for player in match_data[team]:
+                    # Only revert ELO if it was changed in this match
+                    # This logic can be customized as needed
+                    pass
+            # Remove match from results.json
+            del results[self.match_id]
+            with open("results.json", "w") as f:
+                json.dump(results, f, indent=2)
+            # Remove embeds/images from both channels
+            await remove_match_embeds(self.bot, self.match_id)
+            await interaction.response.send_message(f"✅ Scoreboard for match {self.match_id} reverted. Match ID can be submitted again.", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"Error reverting scoreboard: {str(e)}", ephemeral=True)
     def __init__(self, match_id, match_data, bot):
         super().__init__(timeout=None)  # No timeout for staff controls
         self.match_id = match_id
@@ -98,22 +114,40 @@ class PlayerSelect(View):
             for player in match_data[team]:
                 select.add_option(
                     label=player["name"],
-                    value=f"{player['name']}|{player['kills']}|{player['assists']}|{player['deaths']}"
+                    value=f"{player['name']}|{player['kills']}|{player['assists']}|{player['deaths']}|{player.get('elo', 1000)}"
                 )
         
         select.callback = self.select_callback
         self.add_item(select)
         
     async def select_callback(self, interaction: discord.Interaction):
-        player_name, kills, assists, deaths = interaction.data["values"][0].split("|")
+        player_name, kills, assists, deaths, elo = interaction.data["values"][0].split("|")
         modal = EditMatchModal(
             self.match_id,
             player_name,
             int(kills),
             int(assists),
-            int(deaths)
+            int(deaths),
+            int(elo)
         )
         await interaction.response.send_modal(modal)
+async def remove_match_embeds(bot, match_id):
+    game_results_id = 1406361378792407253
+    staff_results_id = 1411756785383243847
+    channels = [
+        bot.get_channel(game_results_id),
+        bot.get_channel(staff_results_id)
+    ]
+    for channel in channels:
+        if channel:
+            async for message in channel.history(limit=100):
+                if message.embeds:
+                    embed = message.embeds[0]
+                    if embed.description and f"Match ID: `{match_id}`" in embed.description:
+                        try:
+                            await message.delete()
+                        except Exception as e:
+                            print(f"Failed to delete message: {e}")
 
 async def update_match_embeds(bot, match_id, match_data):
     """Updates all embeds for a given match in both results channels"""
@@ -146,6 +180,12 @@ async def update_match_embeds(bot, match_id, match_data):
                             from main import render_html_to_image
                             await render_html_to_image(match_data, output_file)
                             await message.attachments[0].edit(file=discord.File(output_file))
+                            # Clean up the PNG file after sending
+                            import os
+                            try:
+                                os.remove(output_file)
+                            except OSError:
+                                pass
                         except Exception as e:
                             print(f"Failed to update scoreboard image: {e}")
 
