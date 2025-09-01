@@ -1967,14 +1967,20 @@ async def on_voice_state_update(member, before, after):
 
         # start if enough players present
         if count >= required:
-            # edit status message to show starting picking
-            status_msg_id = lobby_status[text_ch.id]["message_id"]
+            # Update status message to show starting picking
+            status = lobby_status.get(text_ch.id, {})
+            embed = discord.Embed(title="✅ Lobby full — starting picking stage...", color=discord.Color.green())
             try:
-                status_msg = await text_ch.fetch_message(status_msg_id)
-                embed = discord.Embed(title="✅ Lobby full — starting picking stage...", color=discord.Color.green())
-                await status_msg.edit(embed=embed, view=None)
-            except Exception:
-                pass
+                await update_or_send_message(
+                    text_ch,
+                    status.get("message_id"),
+                    embed=embed,
+                    view=None
+                )
+            except Exception as e:
+                print(f"Error updating lobby status: {e}")
+            
+            # Start the picking stage
             await start_picking_stage(text_ch, lobby.members)
 
 # ---------- Commands ----------
