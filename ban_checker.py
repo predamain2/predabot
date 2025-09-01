@@ -64,7 +64,7 @@ async def check_banned_players(guild) -> Set[str]:
         removed_players = set()
         for user_id in list(players.keys()):
             try:
-                if int(user_id) in bans:  # Player is banned
+                if int(user_id) in ban_list:  # Player is banned
                     del players[user_id]
                     removed_players.add(user_id)
             except ValueError:
