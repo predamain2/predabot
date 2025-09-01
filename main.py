@@ -1518,35 +1518,36 @@ async def on_ready():
     current_step = 0
 
     # Step 1: Bot Login
-    current_step += 1
-    update_startup_progress(current_step, total_steps, startup_start, "Logging in to Discord")
+    update_startup_progress(1, total_steps, startup_start, "Logging in to Discord")
     print(f'\n[STARTUP] Bot logged in as {bot.user} (ID: {bot.user.id})')
+    await asyncio.sleep(0.2)  # Small delay to show progress
     
     # Step 2: Discord API Connection
-    current_step += 1
-    update_startup_progress(current_step, total_steps, startup_start, "Connecting to Discord API")
-    await asyncio.sleep(0.5)  # Brief pause to show progress
+    update_startup_progress(2, total_steps, startup_start, "Connecting to Discord API")
+    await asyncio.sleep(0.2)  # Small delay to show progress
     
     # Step 3: Load Timeouts
-    current_step += 1
-    update_startup_progress(current_step, total_steps, startup_start, "Loading timeouts")
+    update_startup_progress(3, total_steps, startup_start, "Loading timeouts")
     global timeouts
     timeouts = load_timeouts()
+    await asyncio.sleep(0.2)  # Small delay to show progress
     
     # Step 4: Load Guild
-    current_step += 1
-    update_startup_progress(current_step, total_steps, startup_start, "Connecting to guild")
+    update_startup_progress(4, total_steps, startup_start, "Connecting to guild")
     try:
         guild = bot.get_guild(config.GUILD_ID)
         if guild:
+            await asyncio.sleep(0.2)  # Small delay to show progress
+            
             # Step 5: Initialize Guild Connection
-            current_step += 1
-            update_startup_progress(current_step, total_steps, startup_start, f"Connected to {guild.name}")
+            update_startup_progress(5, total_steps, startup_start, f"Connected to {guild.name}")
+            await asyncio.sleep(0.2)  # Small delay to show progress
             
             # Step 6: Start Ban Check
-            current_step += 1
-            update_startup_progress(current_step, total_steps, startup_start, "Starting ban check")
+            update_startup_progress(6, total_steps, startup_start, "Starting ban check")
             bot.loop.create_task(_check_bans_and_report(guild))
+            print('\n[STARTUP] Initialization complete!')
+            print('[STARTUP] Bot is now ready to receive commands')
         else:
             print('\n[STARTUP] WARNING: Could not find configured guild!')
     except Exception as e:
