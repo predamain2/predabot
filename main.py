@@ -4,29 +4,6 @@ from discord.ext import commands
 from discord.ui import View, Select, Button
 import asyncio, random, uuid, json, pathlib, re, time
 from datetime import datetime, timedelta
-from startup_utils import load_startup_data, save_json_safe
-
-# ---------- Progress Tracking ----------
-def update_startup_progress(current_step, total_steps, start_time, status_message):
-    """Display startup progress with status message"""
-    length = 50  # Progress bar length
-    percent = float(current_step) * 100 / total_steps
-    filled_length = int(length * current_step // total_steps)
-    bar = '█' * filled_length + '-' * (length - filled_length)
-    
-    # Calculate time elapsed
-    elapsed_time = time.time() - start_time
-    if current_step > 0:
-        items_per_second = current_step / elapsed_time
-        remaining_items = total_steps - current_step
-        eta_seconds = remaining_items / items_per_second if items_per_second > 0 else 0
-        eta = f"ETA: {int(eta_seconds)}s"
-    else:
-        eta = "ETA: calculating..."
-    
-    print(f'\r[STARTUP] |{bar}| {percent:.1f}% - Step {current_step}/{total_steps} - {status_message} - {eta}', end='', flush=True)
-    if current_step == total_steps:
-        print()  # New line when complete
 
 # ---------- Intents & Bot ----------
 intents = discord.Intents.default()
@@ -134,31 +111,11 @@ def get_timeout_remaining(user_id):
         return int(timeout_end - current_time)
     return 0
 
-async def add_timeout(user_id, duration=TIMEOUT_DURATION, reason="leaving during an active session"):
-    """Add a timeout for a user and send notification"""
+def add_timeout(user_id, duration=TIMEOUT_DURATION):
+    """Add a timeout for a user"""
     timeout_end = time.time() + duration
     timeouts[str(user_id)] = timeout_end
     save_timeouts()
-
-    # Send notification to the timeout channel
-    try:
-        channel = bot.get_channel(config.TIMEOUT_NOTIFICATION_CHANNEL_ID)
-        if channel:
-            minutes = duration // 60
-            seconds = duration % 60
-            end_time = datetime.fromtimestamp(timeout_end)
-            
-            embed = discord.Embed(
-                title="🚫 Player Timeout",
-                description=f"<@{user_id}> has been timed out for {reason}.",
-                color=discord.Color.red()
-            )
-            embed.add_field(name="Duration", value=f"{minutes}m {seconds}s", inline=True)
-            embed.add_field(name="Ends At", value=end_time.strftime("%H:%M:%S"), inline=True)
-            await channel.send(embed=embed)
-    except Exception as e:
-        print(f"Failed to send timeout notification: {e}")
-
     return timeout_end
 
 def key_of(m):
@@ -441,21 +398,19 @@ class DraftView(View):
         for m in st['waiting']:
             p = player_data.get(key_of(m)) or ensure_player(m)
             label = getattr(m, "display_name", str(key_of(m)))
+            level_role = config.LEVEL_ROLES.get(p.get('level', 0), '⭐')  # Default to ⭐ if no level
             
-            # Get level emoji safely
-            level = p.get('level', 0) if p else 0
-            level_emoji = getattr(config, 'LEVEL_ROLES', {}).get(level, '⭐')
-            
-            # Calculate winrate only from existing data
+            # Calculate average kills per game and winrate
             total_games = p.get('wins', 0) + p.get('losses', 0)
-            winrate = f"{round((p.get('wins', 0) / max(total_games, 1)) * 100)}%" if total_games > 0 else "N/A"
+            avg_kills = round(p.get('total_kills', 0) / max(total_games, 1), 1)
+            winrate = round((p.get('wins', 0) / max(total_games, 1)) * 100, 1)
             
-            desc = f"WR: {winrate}"
+            desc = f"Avg: {avg_kills} | WR: {winrate}%"
             opts.append(discord.SelectOption(
-                label=label[:100],
+                label=label[:100], 
                 description=desc[:100],
                 value=str(key_of(m)),
-                emoji=level_emoji
+                emoji=level_role
             ))
 
         if not opts:
@@ -627,11 +582,9 @@ def build_roster_embed(st):
     
     def format_player(m, is_captain=False):
         p = player_data.get(key_of(m))
-        # Get level emoji safely
-        level = p.get('level', 0) if p else 0
-        level_emoji = getattr(config, 'LEVEL_ROLES', {}).get(level, '⭐')
+        level_role = config.LEVEL_ROLES.get(p.get('level', 0), '⭐')  # Default to ⭐ if no level
         name = getattr(m, "display_name", str(key_of(m)))
-        return f"{level_emoji} {name}" + (" 👑" if is_captain else "")
+        return f"{level_role} {name}" + (" 👑" if is_captain else "")
     
     t1 = "\n".join(format_player(m, m == st['captain_ct']) for m in st['team1']) or "—"
     t2 = "\n".join(format_player(m, m == st['captain_t']) for m in st['team2']) or "—"
@@ -1508,78 +1461,14 @@ async def on_message(message: discord.Message):
 #                       EVENTS
 # =========================================================
 
-from ban_checker import check_banned_players
-
 @bot.event
 async def on_ready():
-    print('='*50)
-    startup_start = time.time()
-    total_steps = 6  # Total number of startup steps
-    current_step = 0
-
-    # Step 1: Bot Login
-    update_startup_progress(1, total_steps, startup_start, "Logging in to Discord")
-    print(f'\n[STARTUP] Bot logged in as {bot.user} (ID: {bot.user.id})')
-    await asyncio.sleep(0.2)  # Small delay to show progress
-    
-    # Step 2: Discord API Connection
-    update_startup_progress(2, total_steps, startup_start, "Connecting to Discord API")
-    await asyncio.sleep(0.2)  # Small delay to show progress
-    
-    # Step 3: Load Timeouts
-    update_startup_progress(3, total_steps, startup_start, "Loading timeouts")
     global timeouts
     timeouts = load_timeouts()
-    await asyncio.sleep(0.2)  # Small delay to show progress
-    
-    # Step 4: Load Guild
-    update_startup_progress(4, total_steps, startup_start, "Connecting to guild")
-    try:
-        guild = bot.get_guild(config.GUILD_ID)
-        if guild:
-            await asyncio.sleep(0.2)  # Small delay to show progress
-            
-            # Step 5: Initialize Guild Connection
-            update_startup_progress(5, total_steps, startup_start, f"Connected to {guild.name}")
-            await asyncio.sleep(0.2)  # Small delay to show progress
-            
-            # Step 6: Start Ban Check
-            update_startup_progress(6, total_steps, startup_start, "Starting ban check")
-            bot.loop.create_task(_check_bans_and_report(guild))
-            print('\n[STARTUP] Initialization complete!')
-            print('[STARTUP] Bot is now ready to receive commands')
-        else:
-            print('\n[STARTUP] WARNING: Could not find configured guild!')
-    except Exception as e:
-        print(f'[STARTUP] Error initiating ban check: {e}')
-    
-    print('[STARTUP] Initialization complete!')
-    print('[STARTUP] Bot is now ready to receive commands')
-    print('='*50)
 
-async def _check_bans_and_report(guild):
-    """Background task to check bans and report results"""
-    try:
-        print('[BAN CHECK] Starting banned players check...')
-        print('[BAN CHECK] Loading players.json...')
-        removed_players = await check_banned_players(guild)
-        
-        if removed_players:
-            print(f'[BAN CHECK] Removed {len(removed_players)} banned players from players.json:')
-            for player_id in removed_players:
-                print(f'[BAN CHECK] - Removed banned player: {player_id}')
-        else:
-            print('[BAN CHECK] No banned players found in players.json')
-        
-        print('[BAN CHECK] Ban check complete!')
-    except Exception as e:
-        print(f'[BAN CHECK] Error during ban check: {e}')
+    print('Bot ready', bot.user)
 
-@bot.event
-async def on_member_ban(guild, user):
-    """Handle player ban by removing them from players.json"""
-    from player_validator import handle_player_ban
-    await handle_player_ban(str(user.id), guild)
+    print("Starting bot setup...")
     
     # Load all cogs/extensions first
     try:
@@ -1693,22 +1582,18 @@ async def on_voice_state_update(member, before, after):
                     return
 
     # When someone joins, check if they're timed out first
-    if moved_into_lobby and is_player_timed_out(member.id):
-        remaining = get_timeout_remaining(member.id)
-        minutes = remaining // 60
-        seconds = remaining % 60
-        current_time = time.time()
-        
-        # First try to remove them from the lobby
-        try:
-            await member.move_to(None)
-        except discord.Forbidden:
-            pass  # Bot doesn't have permission to move member
+    if moved_into_lobby:
+        # Check if player is timed out
+        if is_player_timed_out(member.id):
+            remaining = get_timeout_remaining(member.id)
+            minutes = remaining // 60
+            seconds = remaining % 60
             
-        # Handle timeout messages with rate limiting
-        try:
-            last_timeout_msg = getattr(member, '_last_timeout_msg', 0)
-            if current_time - last_timeout_msg > 30:  # Only send message every 30 seconds
+            try:
+                # Move them out of the lobby
+                await member.move_to(None)
+                
+                # Send timeout message
                 text_ch = guild.get_channel(config.LOBBY_TEXT_CHANNEL_ID)
                 if text_ch:
                     embed = discord.Embed(
@@ -1717,25 +1602,23 @@ async def on_voice_state_update(member, before, after):
                         color=discord.Color.red()
                     )
                     await text_ch.send(embed=embed, delete_after=10)
-                    setattr(member, '_last_timeout_msg', current_time)
-        except Exception as e:
-            print(f"Failed to send timeout message: {e}")
-            
-        # Handle DM with rate limiting
-        try:
-            last_timeout_dm = getattr(member, '_last_timeout_dm', 0)
-            if current_time - last_timeout_dm > 300:  # Only DM every 5 minutes
-                dm_embed = discord.Embed(
-                    title="🚫 Lobby Timeout",
-                    description=f"You are timed out from joining lobbies for leaving during an active session.\n\nTime remaining: {minutes}m {seconds}s",
-                    color=discord.Color.red()
-                )
-                await member.send(embed=dm_embed)
-                setattr(member, '_last_timeout_dm', current_time)
-        except Exception:
-            pass  # Failed to send DM
-            
-        return  # Skip normal lobby join logic
+                    
+                # Try to DM the user
+                try:
+                    dm_embed = discord.Embed(
+                        title="🚫 Lobby Timeout",
+                        description=f"You are timed out from joining lobbies for leaving during an active session.\n\nTime remaining: {minutes}m {seconds}s",
+                        color=discord.Color.red()
+                    )
+                    await member.send(embed=dm_embed)
+                except:
+                    pass  # User might have DMs disabled
+                    
+                return  # Don't process normal lobby join logic
+                
+            except discord.Forbidden:
+                # Bot doesn't have permission to move member
+                pass
         
         # Normal lobby join logic (only if not timed out)
         lobby = after.channel
@@ -1885,7 +1768,44 @@ class EditProfileModal(discord.ui.Modal, title="Edit Profile"):
             
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-
+@bot.tree.command(name="sync_nicknames", description="Update all registered players' Discord nicknames to match their registered nicknames")
+@commands.has_permissions(administrator=True)
+async def sync_nicknames(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    
+    guild = interaction.guild
+    if not guild:
+        await interaction.followup.send("❌ This command can only be used in a server.", ephemeral=True)
+        return
+        
+    updated = 0
+    failed = 0
+    skipped_admins = 0
+    
+    for user_id, data in player_data.items():
+        member = guild.get_member(int(user_id))
+        if member:
+            # Skip administrators - they need to update their nicknames manually
+            if member.guild_permissions.administrator:
+                skipped_admins += 1
+                continue
+                
+            try:
+                await member.edit(nick=data["nick"])
+                updated += 1
+            except discord.errors.Forbidden:
+                failed += 1
+            except Exception as e:
+                print(f"Failed to update nickname for {member.name}: {e}")
+                failed += 1
+                
+    await interaction.followup.send(
+        f"✅ Nickname sync complete:\n"
+        f"- {updated} nicknames updated successfully\n"
+        f"- {failed} updates failed\n"
+        f"- {skipped_admins} administrators skipped (must update manually)",
+        ephemeral=True
+    )
 
 @bot.tree.command(name="edit_profile", description="Edit your nickname and Standoff2 ID")
 async def edit_profile(interaction: discord.Interaction):
