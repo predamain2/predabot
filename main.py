@@ -20,6 +20,34 @@ RESULTS_FILE = pathlib.Path("results.json")  # NEW: scoreboard submissions
 PARTIES_FILE = pathlib.Path("parties.json")  # NEW: party data
 TIMEOUTS_FILE = pathlib.Path("timeouts.json")
 
+# ---------- Message handling helpers ----------
+async def update_or_send_message(channel, message_id=None, **kwargs):
+    """Helper function to update an existing message or send a new one
+    Returns: The message object
+    """
+    try:
+        msg = None
+        if message_id:
+            try:
+                msg = await channel.fetch_message(message_id)
+            except discord.NotFound:
+                pass
+            except Exception as e:
+                print(f"Error fetching message: {e}")
+
+        if msg:
+            try:
+                await msg.edit(**kwargs)
+                return msg
+            except discord.HTTPException:
+                pass
+
+        # If we couldn't edit or there was no message, send new
+        return await channel.send(**kwargs)
+    except Exception as e:
+        print(f"Error in message handling: {e}")
+        raise
+
 def load_players():
     if DATA_FILE.exists():
         try:
@@ -192,8 +220,7 @@ def label_for(m):
     """Get the display label for a player in the team list"""
     p = player_data.get(key_of(m)) or ensure_player(m)
     level = p.get('level', 1)
-    # Use a simple text format instead of custom emoji
-    return f"[Lvl {level}] {p['nick']}"
+    return f"<:level{level}:{config.GUILD_ID}> {p['nick']}"
 
 class FakeMember:
     def __init__(self, idx):
@@ -819,30 +846,49 @@ def get_role_icon(guild, role_id):
     return None
 
 def build_roster_embed(st):
-    e = discord.Embed(title="Match Draft — Pick Phase", color=discord.Color.blurple())
-    pick_turn = st.get('pick_turn')
-    pick_mention = getattr(pick_turn, "mention", f"<@{id_of(pick_turn)}>")
-    match_id = st.get('match_id', '—')
-    e.description = f"Match ID: `{match_id}`\nNext to pick: {pick_mention}"
-    
-    # Format team lists
-    def format_team_list(team, guild):
-        lines = []
-        for m in team:
-            label = label_for(m)  # Using our simplified label_for function
-            lines.append(label)
-        return "\n".join(lines) if lines else "—"
-    
-    guild = bot.get_guild(config.GUILD_ID)
-    t1 = format_team_list(st['team1'], guild)
-    t2 = format_team_list(st['team2'], guild)
-    
-    e.add_field(name="Team 1 (CT)", value=t1, inline=True)
-    e.add_field(name="Team 2 (T)", value=t2, inline=True)
-    
-    # Add empty field to maintain 2-column layout
-    e.add_field(name="\u200b", value="\u200b", inline=True)
-    return e
+    try:
+        e = discord.Embed(title="Match Draft — Pick Phase", color=discord.Color.blurple())
+        
+        # Add turn information
+        pick_turn = st.get('pick_turn')
+        if hasattr(pick_turn, 'mention'):
+            pick_mention = pick_turn.mention
+        else:
+            pick_mention = f"<@{id_of(pick_turn)}>"
+        
+        # Add match info
+        match_id = st.get('match_id', '—')
+        e.description = f"Match ID: `{match_id}`\nNext to pick: {pick_mention}"
+        
+        # Format team lists
+        def format_team_list(team):
+            if not team:
+                return "—"
+            lines = []
+            for m in team:
+                p = ensure_player(m)
+                nick = p.get('nick', 'Unknown')
+                level = p.get('level', 1)
+                lines.append(f"• Lvl {level} | {nick}")
+            return "\n".join(lines)
+        
+        # Add team fields
+        t1 = format_team_list(st['team1'])
+        t2 = format_team_list(st['team2'])
+        
+        e.add_field(name="Team 1 (CT)", value=t1, inline=True)
+        e.add_field(name="Team 2 (T)", value=t2, inline=True)
+        e.add_field(name="\u200b", value="\u200b", inline=True)  # Spacing field
+        
+        return e
+    except Exception as e:
+        print(f"Error building roster embed: {e}")
+        # Return a basic embed if something goes wrong
+        return discord.Embed(
+            title="Match Draft",
+            description="Error displaying teams. Please try again.",
+            color=discord.Color.red()
+        )
 
 async def announce_teams_final(channel: discord.TextChannel, match_id, chosen_map, st):
     print("\n=== Starting Team Announcement ===")
@@ -1117,31 +1163,32 @@ async def start_picking_stage(channel, member_list):
     }
     active_picks[chan_id] = st
 
-    # Edit or create the single status message for this lobby
-    status = lobby_status.get(chan_id, {})
-    msg = None
-    if status.get("message_id"):
-        try:
-            msg = await channel.fetch_message(status["message_id"])
-        except Exception:
-            msg = None
-
+    # Update or create the lobby message
     embed = build_roster_embed(st)
     view = DraftView(chan_id)
-    if msg:
-        try:
-            await msg.edit(embed=embed, view=view, content=None)
-        except Exception:
-            new_msg = await channel.send(embed=embed, view=view)
-            st['message_id'] = new_msg.id
-            lobby_status[chan_id] = {"message_id": new_msg.id, "state": "picking"}
-            return
+    
+    try:
+        # Get current status first
+        status = lobby_status.get(chan_id, {})
+        
+        # Update or send message using helper
+        msg = await update_or_send_message(
+            channel,
+            status.get("message_id"),
+            embed=embed,
+            view=view
+        )
         st['message_id'] = msg.id
+        
+        # Update lobby status
         lobby_status[chan_id] = {"message_id": msg.id, "state": "picking"}
-    else:
-        new_msg = await channel.send(embed=embed, view=view)
-        st['message_id'] = new_msg.id
-        lobby_status[chan_id] = {"message_id": new_msg.id, "state": "picking"}
+        
+    except Exception as e:
+        print(f"Error updating lobby message: {e}")
+        # Ensure we don't leave the pick session in a broken state
+        if chan_id in active_picks:
+            del active_picks[chan_id]
+        raise
 
 # ---------- Cancel session helper ----------
 async def cancel_session_and_reset(channel_id, reason="A player left. Lobby reset.", leaver_id=None):
@@ -2370,14 +2417,22 @@ async def timeout_status(interaction: discord.Interaction):
 @discord.app_commands.describe(player="The player to remove timeout from")
 @commands.has_permissions(administrator=True)
 async def remove_timeout(interaction: discord.Interaction, player: discord.Member):
+    """Remove timeout from a player"""
     user_id = str(player.id)
+    was_timed_out = user_id in timeouts
     
-    if user_id in timeouts:
+    if was_timed_out:
         del timeouts[user_id]
         save_timeouts()
-        await interaction.response.send_message(f"✅ Timeout removed for {player.display_name}", ephemeral=True)
-    else:
-        await interaction.response.send_message(f"❌ {player.display_name} is not timed out", ephemeral=True)
+        
+    embed = discord.Embed(
+        title="✅ Timeout Removed" if was_timed_out else "❌ Not Timed Out",
+        description=f"Timeout removed for {player.display_name}" if was_timed_out else f"{player.display_name} is not timed out",
+        color=discord.Color.green() if was_timed_out else discord.Color.red()
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
 
 
 if __name__ == '__main__':
