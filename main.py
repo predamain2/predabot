@@ -155,9 +155,43 @@ def ensure_player(m):
         save_players()
     return player_data[k]
 
+def get_player_avg_kills(player_nick):
+    """Calculate average kills for a player from results.json"""
+    total_kills = 0
+    total_matches = 0
+    
+    for match in results_data.values():
+        # Check both CT and T teams
+        for team in ['ct_team', 't_team']:
+            if team in match:
+                for player in match[team]:
+                    if player['name'].lower() == player_nick.lower():
+                        total_kills += int(player.get('kills', 0))
+                        total_matches += 1
+                        break
+    
+    if total_matches == 0:
+        return 0.0
+    return round(total_kills / total_matches, 1)
+
+def get_player_winrate(player_id):
+    """Calculate winrate percentage for a player"""
+    p = player_data.get(str(player_id))
+    if not p:
+        return 0.0
+    total_games = p.get('wins', 0) + p.get('losses', 0)
+    if total_games == 0:
+        return 0.0
+    return round((p.get('wins', 0) / total_games) * 100, 1)
+
+def get_level_role(level):
+    """Get the role ID for a given level from config"""
+    return config.ROLE_LEVELS.get(level, config.ROLE_LEVELS[1])  # Fallback to level 1 if level not found
+
 def label_for(m):
+    """Get the display label for a player in the team list"""
     p = player_data.get(key_of(m)) or ensure_player(m)
-    return f"{p['nick']} | L{p['level']} | ELO {p['elo']}"
+    return p['nick']  # Just show the nickname for now
 
 class FakeMember:
     def __init__(self, idx):
@@ -396,10 +430,37 @@ class DraftView(View):
 
         opts = []
         for m in st['waiting']:
-            label = getattr(m, "display_name", str(key_of(m)))
+            # Get player data and calculate stats
             p = player_data.get(key_of(m)) or ensure_player(m)
-            desc = f"Lvl {p['level']} | ELO {p['elo']} | W{p.get('wins',0)}-L{p.get('losses',0)}"
-            opts.append(discord.SelectOption(label=label[:100], description=desc[:100], value=str(key_of(m))))
+            avg_kills = get_player_avg_kills(p['nick'])
+            winrate = get_player_winrate(key_of(m))
+            
+            # Get player level and role icon
+            player_level = p.get('level', 1)
+            role_id = get_level_role(player_level)
+            
+            # Try to get role icon
+            guild = bot.get_guild(config.GUILD_ID)
+            icon_url = get_role_icon(guild, role_id)
+            
+            # Format the label with stats
+            stats_str = f"Avg: {avg_kills:.1f} | WR: {winrate:.1f}%"
+            
+            # Create select option with icon if available
+            option = discord.SelectOption(
+                label=p['nick'],
+                description=stats_str,
+                value=str(key_of(m))
+            )
+            
+            if icon_url:
+                try:
+                    # Try to use a small unicode symbol that matches your role icon style
+                    option.emoji = "⬢"  # Hexagon shape, you can change this
+                except:
+                    pass
+                    
+            opts.append(option)
 
         if not opts:
             return
@@ -561,18 +622,42 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
         await interaction.response.defer()
 
 # ---------- Embeds / announce ----------
+def get_role_icon(guild, role_id):
+    """Get the role icon from the guild, if available"""
+    role = guild.get_role(role_id)
+    if role and role.icon:
+        return role.icon.url
+    return None
+
 def build_roster_embed(st):
     e = discord.Embed(title="Match Draft — Pick Phase", color=discord.Color.blurple())
     pick_turn = st.get('pick_turn')
     pick_mention = getattr(pick_turn, "mention", f"<@{id_of(pick_turn)}>")
     match_id = st.get('match_id', '—')
     e.description = f"Match ID: `{match_id}`\nNext to pick: {pick_mention}"
-    t1 = "\n".join(label_for(m) for m in st['team1']) or "—"
-    t2 = "\n".join(label_for(m) for m in st['team2']) or "—"
-    w = "\n".join(label_for(m) for m in st['waiting']) or "—"
+    
+    # Format team lists with role icons
+    def format_team_list(team, guild):
+        lines = []
+        for m in team:
+            p = player_data.get(key_of(m)) or ensure_player(m)
+            role_id = get_level_role(p.get('level', 1))
+            icon_url = get_role_icon(guild, role_id)
+            if icon_url:
+                lines.append(f"[⬢]({icon_url}) {p['nick']}")  # Using a small shape as placeholder, linked to icon
+            else:
+                lines.append(f"• {p['nick']}")  # Fallback to bullet point if no icon
+        return "\n".join(lines) if lines else "—"
+    
+    guild = bot.get_guild(config.GUILD_ID)
+    t1 = format_team_list(st['team1'], guild)
+    t2 = format_team_list(st['team2'], guild)
+    
     e.add_field(name="Team 1 (CT)", value=t1, inline=True)
     e.add_field(name="Team 2 (T)", value=t2, inline=True)
-    e.add_field(name="Available players", value=w, inline=False)
+    
+    # Add empty field to maintain 2-column layout
+    e.add_field(name="\u200b", value="\u200b", inline=True)
     return e
 
 async def announce_teams_final(channel: discord.TextChannel, match_id, chosen_map, st):
@@ -767,22 +852,25 @@ async def start_picking_stage(channel, member_list):
         else:
             captain1, captain2 = non_party_members[0], non_party_members[1]
 
-    # Create waiting list, ensuring party members go with their leaders
+    # Create initial teams and waiting list
+    team1 = [captain1]
+    team2 = [captain2]
     waiting = []
     
-    # First, add party members of captain1
+    # First, auto-assign party member of captain1 to team1
     if str(getattr(captain1, 'id', captain1)) in party_members:
-        waiting.extend(party_members[str(getattr(captain1, 'id', captain1))])
+        party_member = party_members[str(getattr(captain1, 'id', captain1))][0]  # Only one member in party
+        team1.append(party_member)
         
-    # Then party members of captain2
+    # Then auto-assign party member of captain2 to team2
     if str(getattr(captain2, 'id', captain2)) in party_members:
-        waiting.extend(party_members[str(getattr(captain2, 'id', captain2))])
+        party_member = party_members[str(getattr(captain2, 'id', captain2))][0]  # Only one member in party
+        team2.append(party_member)
         
-    # Then add remaining party members (from other parties)
+    # Add remaining party members to waiting list (party leaders who aren't captains + their members)
     for leader_id, members in party_members.items():
         if leader_id not in [str(getattr(captain1, 'id', captain1)), str(getattr(captain2, 'id', captain2))]:
-            waiting.extend([leader for leader in party_leaders if str(getattr(leader, 'id', leader)) == leader_id])
-            waiting.extend(members)
+            waiting.extend(members)  # Add the one member to waiting list
             
     # Finally add remaining non-party members
     remaining_members = [p for p in participants if p not in (captain1, captain2) and p not in waiting]
@@ -790,42 +878,55 @@ async def start_picking_stage(channel, member_list):
 
     chan_id = channel.id
     
-    # Initialize teams with captains
-    team1 = [captain1]
-    team2 = [captain2]
+    # Add remaining non-party members to waiting list
+    remaining_members = [p for p in participants 
+                        if p not in team1 
+                        and p not in team2 
+                        and p not in waiting]
+    waiting.extend(remaining_members)
     
-    # If captain1 is a party leader, automatically assign their party members to team1
+    # Double check if any party members were missed
     if str(getattr(captain1, 'id', captain1)) in party_members:
         party_members_list = party_members[str(getattr(captain1, 'id', captain1))]
-        team1.extend(party_members_list)
-        # Remove these members from waiting list as they're now assigned
-        for member in party_members_list:
+        # Only add up to 4 more players (5 total including captain)
+        members_to_add = min(len(party_members_list), 4)
+        team1.extend(party_members_list[:members_to_add])
+        # Remove assigned members from waiting list
+        for member in party_members_list[:members_to_add]:
             if member in waiting:
                 waiting.remove(member)
+        # Add any remaining members to waiting list
+        for member in party_members_list[members_to_add:]:
+            if member not in waiting:
+                waiting.append(member)
     
-    # Assign party members to teams, ensuring balance
-    for leader, members in party_members.items():
-        if str(getattr(captain1, 'id', captain1)) == leader:
-            for m in members:
-                if m not in team1 and m not in team2:
-                    team1.append(m)
-        elif str(getattr(captain2, 'id', captain2)) == leader:
-            for m in members:
-                if m not in team2 and m not in team1:
-                    team2.append(m)
-    # If teams are unbalanced, move extra party members to waiting
+    # Since parties are limited to 2 players and we already assigned party members 
+    # of captains, we just need to ensure no duplicates in waiting list
+    waiting = list(set(waiting))
+    
+    # Double check team sizes (should never be needed now since parties are max 2 players)
     while len(team1) > 5:
-        waiting.append(team1.pop())
+        extra = team1.pop()
+        if extra not in waiting:
+            waiting.append(extra)
     while len(team2) > 5:
         waiting.append(team2.pop())
 
+    # Determine first pick based on team sizes and CT priority
+    if len(team1) == len(team2):
+        # If teams are equal size (both have 2 from parties or both have 1), CT (team1) gets first pick
+        first_pick = captain1
+    else:
+        # Otherwise, team with fewer players gets first pick
+        first_pick = captain1 if len(team1) < len(team2) else captain2
+    
     st = {
         'team1': team1,
         'team2': team2,
         'waiting': waiting,
         'captain_ct': captain1,
         'captain_t': captain2,
-        'pick_turn': captain1 if len(team1) <= len(team2) else captain2,  # Give first pick to team with fewer players
+        'pick_turn': first_pick,  # Assigned based on team sizes and CT priority
         'picks_made': 0,
         'lock': asyncio.Lock(),
         'message_id': None
