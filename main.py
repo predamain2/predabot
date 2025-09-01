@@ -20,40 +20,12 @@ RESULTS_FILE = pathlib.Path("results.json")  # NEW: scoreboard submissions
 PARTIES_FILE = pathlib.Path("parties.json")  # NEW: party data
 TIMEOUTS_FILE = pathlib.Path("timeouts.json")
 
-# ---------- Message handling helpers ----------
-async def update_or_send_message(channel, message_id=None, **kwargs):
-    """Helper function to update an existing message or send a new one
-    Returns: The message object
-    """
-    try:
-        msg = None
-        if message_id:
-            try:
-                msg = await channel.fetch_message(message_id)
-            except discord.NotFound:
-                pass
-            except Exception as e:
-                print(f"Error fetching message: {e}")
-
-        if msg:
-            try:
-                await msg.edit(**kwargs)
-                return msg
-            except discord.HTTPException:
-                pass
-
-        # If we couldn't edit or there was no message, send new
-        return await channel.send(**kwargs)
-    except Exception as e:
-        print(f"Error in message handling: {e}")
-        raise
-
 def load_players():
     if DATA_FILE.exists():
         try:
             return json.loads(DATA_FILE.read_text())
         except Exception:
-            pass
+            return {}
     return {}
 
 def load_parties():
@@ -61,7 +33,7 @@ def load_parties():
         try:
             return json.loads(PARTIES_FILE.read_text())
         except Exception:
-            pass
+            return {}
     return {}
 
 def save_parties():
@@ -183,44 +155,9 @@ def ensure_player(m):
         save_players()
     return player_data[k]
 
-def get_player_avg_kills(player_nick):
-    """Calculate average kills for a player from results.json"""
-    total_kills = 0
-    total_matches = 0
-    
-    for match in results_data.values():
-        # Check both CT and T teams
-        for team in ['ct_team', 't_team']:
-            if team in match:
-                for player in match[team]:
-                    if player['name'].lower() == player_nick.lower():
-                        total_kills += int(player.get('kills', 0))
-                        total_matches += 1
-                        break
-    
-    if total_matches == 0:
-        return 0.0
-    return round(total_kills / total_matches, 1)
-
-def get_player_winrate(player_id):
-    """Calculate winrate percentage for a player"""
-    p = player_data.get(str(player_id))
-    if not p:
-        return 0.0
-    total_games = p.get('wins', 0) + p.get('losses', 0)
-    if total_games == 0:
-        return 0.0
-    return round((p.get('wins', 0) / total_games) * 100, 1)
-
-def get_level_role(level):
-    """Get the role ID for a given level from config"""
-    return config.ROLE_LEVELS.get(level, config.ROLE_LEVELS[1])  # Fallback to level 1 if level not found
-
 def label_for(m):
-    """Get the display label for a player in the team list"""
     p = player_data.get(key_of(m)) or ensure_player(m)
-    level = p.get('level', 1)
-    return f"<:level{level}:{config.GUILD_ID}> {p['nick']}"
+    return f"{p['nick']} | L{p['level']} | ELO {p['elo']}"
 
 class FakeMember:
     def __init__(self, idx):
@@ -362,76 +299,6 @@ class RegisterModal(discord.ui.Modal, title="Player Registration"):
         guild = interaction.guild
         member = interaction.user
 
-        nick_value = self.nick.value.strip()
-        pid_value = self.pid.value.strip()
-
-        await interaction.response.defer(ephemeral=True)
-
-        if not pid_value.isdigit():
-            await interaction.followup.send("❌ Player ID must contain only numbers.", ephemeral=True)
-            return
-
-        # Check for duplicate nick/id
-        for k, v in player_data.items():
-            if k != str(member.id):
-                if v.get('nick') == nick_value:
-                    await interaction.followup.send("❌ That nickname is already registered.", ephemeral=True)
-                    return
-                if v.get('id') == pid_value:
-                    await interaction.followup.send("❌ That Player ID is already registered.", ephemeral=True)
-                    return
-
-        # Register the player
-        player_data[str(member.id)] = {
-            "nick": nick_value,
-            "id": pid_value,
-            "level": 1,
-            "elo": config.DEFAULT_ELO,
-            "wins": 0,
-            "losses": 0,
-            "banned": False
-        }
-        save_players()
-
-        success_msg = []
-        success_msg.append(f"✅ Registered as **{nick_value}**")
-
-        try:
-            if member.id != guild.owner_id:
-                await member.edit(nick=nick_value)
-                success_msg.append("✅ Updated Discord nickname")
-        except Exception as e:
-            success_msg.append(f"❌ Could not update nickname: {str(e)}")
-
-        try:
-            roles_to_add = []
-            level_role = guild.get_role(get_level_role(1))
-            reg_role = guild.get_role(config.ROLE_REGISTERED)
-            
-            if level_role:
-                roles_to_add.append(level_role)
-            if reg_role:
-                roles_to_add.append(reg_role)
-                
-            if roles_to_add:
-                await member.add_roles(*roles_to_add)
-                success_msg.append("✅ Added roles")
-            else:
-                success_msg.append("⚠️ No roles to add (roles not found)")
-        except discord.Forbidden:
-            success_msg.append("❌ Could not add roles: Missing permissions")
-        except Exception as e:
-            success_msg.append(f"❌ Could not add roles: {str(e)}")
-
-        await interaction.followup.send("\n".join(success_msg), ephemeral=True)
-
-        # Update leaderboard if available
-        general_cog = bot.get_cog('General')
-        if general_cog and hasattr(general_cog, 'update_leaderboard'):
-            await general_cog.update_leaderboard()
-        guild = interaction.guild
-        member = interaction.user
-
         # Get the values from TextInput fields
         nick_value = self.nick.value.strip()
         pid_value = self.pid.value.strip()
@@ -510,7 +377,6 @@ class RegisterView(View):
     @discord.ui.button(label="Register", style=discord.ButtonStyle.green, custom_id="standoff_register_btn")
     async def reg_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(RegisterModal())
-        await interaction.response.send_modal(RegisterModal())
 
 # ---------- Draft view (Select menu) ----------
 class DraftView(View):
@@ -520,33 +386,6 @@ class DraftView(View):
         self.build_select()
 
     def build_select(self):
-        # Clear existing items
-        for c in list(self.children):
-            self.remove_item(c)
-
-        # Get pick session state
-        st = active_picks.get(self.channel_id)
-        if not st:
-            return
-
-        # Create options for waiting players
-        opts = []
-        for m in st['waiting']:
-            label = label_for(m)
-            opts.append(discord.SelectOption(label=label, value=key_of(m)))
-
-        if not opts:
-            return
-
-        # Create and add select menu
-        select = Select(placeholder="Pick a player...", min_values=1, max_values=1, options=opts)
-
-        async def on_select(interaction: discord.Interaction):
-            picked_key = interaction.data['values'][0]
-            await handle_pick_select(interaction, self.channel_id, picked_key)
-
-        select.callback = on_select
-        self.add_item(select)
         # clear previous
         for c in list(self.children):
             self.remove_item(c)
@@ -557,26 +396,10 @@ class DraftView(View):
 
         opts = []
         for m in st['waiting']:
-            # Get player data and calculate stats
+            label = getattr(m, "display_name", str(key_of(m)))
             p = player_data.get(key_of(m)) or ensure_player(m)
-            avg_kills = get_player_avg_kills(p['nick'])
-            winrate = get_player_winrate(key_of(m))
-            
-            # Get player level
-            level = p.get('level', 1)
-            
-            # Format the label with stats
-            stats_str = f"Avg: {avg_kills:.1f} | WR: {winrate:.1f}%"
-            
-            # Create select option with level emoji
-            opts.append(
-                discord.SelectOption(
-                    label=p['nick'],
-                    description=stats_str,
-                    value=str(key_of(m)),
-                    emoji=f"level{level}"  # Use custom emoji name
-                )
-            )
+            desc = f"Lvl {p['level']} | ELO {p['elo']} | W{p.get('wins',0)}-L{p.get('losses',0)}"
+            opts.append(discord.SelectOption(label=label[:100], description=desc[:100], value=str(key_of(m))))
 
         if not opts:
             return
@@ -591,106 +414,6 @@ class DraftView(View):
 
 # ---------- Core pick handler (Select) ----------
 async def handle_pick_select(interaction: discord.Interaction, channel_id: int, picked_key: str):
-    st = active_picks.get(channel_id)
-    if not st:
-        await interaction.response.send_message("Draft inactive.", ephemeral=True)
-        return
-
-    # If pick session has been canceled externally, ignore
-    async with st['lock']:
-        uid = interaction.user.id
-        current = st['pick_turn']
-
-        # normalize current id
-        current_id = id_of(current) if not isinstance(current, int) else current
-        if current_id != uid:
-            await interaction.response.send_message("It's not your turn to pick.", ephemeral=True)
-            return
-
-        # find picked object in waiting
-        picked = None
-        for m in st['waiting']:
-            if str(key_of(m)) == str(picked_key):
-                picked = m
-                break
-
-        if not picked:
-            await interaction.response.send_message("Invalid pick.", ephemeral=True)
-            return
-
-        # First, check if picked player is a party leader or member
-        picked_id = str(getattr(picked, 'id', picked))
-        party_members_to_pick = []
-
-        # If picked player is a party leader, get their party members
-        if picked_id in party_data:
-            party_members_to_pick = party_data[picked_id].get('members', [])
-            # Convert member IDs to actual member objects
-            party_members_to_pick = [m for m in st['waiting'] if str(getattr(m, 'id', m)) in party_members_to_pick]
-
-        # Check if adding the party would exceed team size
-        team_size_limit = 5
-        current_team = st['team1'] if str(key_of(current)) == str(key_of(st['captain_ct'])) else st['team2']
-        
-        if len(current_team) + len(party_members_to_pick) + 1 > team_size_limit:
-            await interaction.response.send_message("Cannot pick this player - party size would exceed team limit.", ephemeral=True)
-            return
-
-        # Assign to correct team and switch pick turn
-        if str(key_of(current)) == str(key_of(st['captain_ct'])):
-            st['team1'].append(picked)
-            st['pick_turn'] = st['captain_t']
-            for member in party_members_to_pick:
-                if member in st['waiting']:
-                    st['team1'].append(member)
-                    st['waiting'].remove(member)
-        else:
-            st['team2'].append(picked)
-            st['pick_turn'] = st['captain_ct']
-            for member in party_members_to_pick:
-                if member in st['waiting']:
-                    st['team2'].append(member)
-                    st['waiting'].remove(member)
-
-        st['waiting'].remove(picked)
-        st['picks_made'] += 1 + len(party_members_to_pick)
-
-        # Update message
-        chan = bot.get_channel(channel_id)
-        msg_id = lobby_status.get(channel_id, {}).get("message_id")
-        msg = None
-        if msg_id:
-            try:
-                msg = await chan.fetch_message(msg_id)
-            except:
-                pass
-
-        # If only one player remains, auto-assign them
-        if len(st['waiting']) == 1:
-            last_player = st['waiting'][0]
-            if len(st['team1']) < 5:
-                st['team1'].append(last_player)
-            else:
-                st['team2'].append(last_player)
-            st['waiting'].clear()
-
-        # Proceed to map ban if teams are full
-        if not st['waiting']:
-            map_cog = bot.get_cog('MapBan')
-            if map_cog:
-                await map_cog.start_map_ban(chan, st['team1'], st['team2'])
-            return
-
-        # Update view
-        new_embed = build_roster_embed(st)
-        new_view = DraftView(channel_id)
-        if msg:
-            await msg.edit(embed=new_embed, view=new_view)
-        else:
-            msg = await chan.send(embed=new_embed, view=new_view)
-            lobby_status[channel_id] = {"message_id": msg.id, "state": "picking"}
-
-        await interaction.response.defer()
     st = active_picks.get(channel_id)
     if not st:
         await interaction.response.send_message("Draft inactive.", ephemeral=True)
@@ -838,57 +561,19 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
         await interaction.response.defer()
 
 # ---------- Embeds / announce ----------
-def get_role_icon(guild, role_id):
-    """Get the role icon from the guild, if available"""
-    role = guild.get_role(role_id)
-    if role and role.icon:
-        return role.icon.url
-    return None
-
 def build_roster_embed(st):
-    try:
-        e = discord.Embed(title="Match Draft — Pick Phase", color=discord.Color.blurple())
-        
-        # Add turn information
-        pick_turn = st.get('pick_turn')
-        if hasattr(pick_turn, 'mention'):
-            pick_mention = pick_turn.mention
-        else:
-            pick_mention = f"<@{id_of(pick_turn)}>"
-        
-        # Add match info
-        match_id = st.get('match_id', '—')
-        e.description = f"Match ID: `{match_id}`\nNext to pick: {pick_mention}"
-        
-        # Format team lists
-        def format_team_list(team):
-            if not team:
-                return "—"
-            lines = []
-            for m in team:
-                p = ensure_player(m)
-                nick = p.get('nick', 'Unknown')
-                level = p.get('level', 1)
-                lines.append(f"• Lvl {level} | {nick}")
-            return "\n".join(lines)
-        
-        # Add team fields
-        t1 = format_team_list(st['team1'])
-        t2 = format_team_list(st['team2'])
-        
-        e.add_field(name="Team 1 (CT)", value=t1, inline=True)
-        e.add_field(name="Team 2 (T)", value=t2, inline=True)
-        e.add_field(name="\u200b", value="\u200b", inline=True)  # Spacing field
-        
-        return e
-    except Exception as e:
-        print(f"Error building roster embed: {e}")
-        # Return a basic embed if something goes wrong
-        return discord.Embed(
-            title="Match Draft",
-            description="Error displaying teams. Please try again.",
-            color=discord.Color.red()
-        )
+    e = discord.Embed(title="Match Draft — Pick Phase", color=discord.Color.blurple())
+    pick_turn = st.get('pick_turn')
+    pick_mention = getattr(pick_turn, "mention", f"<@{id_of(pick_turn)}>")
+    match_id = st.get('match_id', '—')
+    e.description = f"Match ID: `{match_id}`\nNext to pick: {pick_mention}"
+    t1 = "\n".join(label_for(m) for m in st['team1']) or "—"
+    t2 = "\n".join(label_for(m) for m in st['team2']) or "—"
+    w = "\n".join(label_for(m) for m in st['waiting']) or "—"
+    e.add_field(name="Team 1 (CT)", value=t1, inline=True)
+    e.add_field(name="Team 2 (T)", value=t2, inline=True)
+    e.add_field(name="Available players", value=w, inline=False)
+    return e
 
 async def announce_teams_final(channel: discord.TextChannel, match_id, chosen_map, st):
     print("\n=== Starting Team Announcement ===")
@@ -1082,25 +767,22 @@ async def start_picking_stage(channel, member_list):
         else:
             captain1, captain2 = non_party_members[0], non_party_members[1]
 
-    # Create initial teams and waiting list
-    team1 = [captain1]
-    team2 = [captain2]
+    # Create waiting list, ensuring party members go with their leaders
     waiting = []
     
-    # First, auto-assign party member of captain1 to team1
+    # First, add party members of captain1
     if str(getattr(captain1, 'id', captain1)) in party_members:
-        party_member = party_members[str(getattr(captain1, 'id', captain1))][0]  # Only one member in party
-        team1.append(party_member)
+        waiting.extend(party_members[str(getattr(captain1, 'id', captain1))])
         
-    # Then auto-assign party member of captain2 to team2
+    # Then party members of captain2
     if str(getattr(captain2, 'id', captain2)) in party_members:
-        party_member = party_members[str(getattr(captain2, 'id', captain2))][0]  # Only one member in party
-        team2.append(party_member)
+        waiting.extend(party_members[str(getattr(captain2, 'id', captain2))])
         
-    # Add remaining party members to waiting list (party leaders who aren't captains + their members)
+    # Then add remaining party members (from other parties)
     for leader_id, members in party_members.items():
         if leader_id not in [str(getattr(captain1, 'id', captain1)), str(getattr(captain2, 'id', captain2))]:
-            waiting.extend(members)  # Add the one member to waiting list
+            waiting.extend([leader for leader in party_leaders if str(getattr(leader, 'id', leader)) == leader_id])
+            waiting.extend(members)
             
     # Finally add remaining non-party members
     remaining_members = [p for p in participants if p not in (captain1, captain2) and p not in waiting]
@@ -1108,87 +790,73 @@ async def start_picking_stage(channel, member_list):
 
     chan_id = channel.id
     
-    # Add remaining non-party members to waiting list
-    remaining_members = [p for p in participants 
-                        if p not in team1 
-                        and p not in team2 
-                        and p not in waiting]
-    waiting.extend(remaining_members)
+    # Initialize teams with captains
+    team1 = [captain1]
+    team2 = [captain2]
     
-    # Double check if any party members were missed
+    # If captain1 is a party leader, automatically assign their party members to team1
     if str(getattr(captain1, 'id', captain1)) in party_members:
         party_members_list = party_members[str(getattr(captain1, 'id', captain1))]
-        # Only add up to 4 more players (5 total including captain)
-        members_to_add = min(len(party_members_list), 4)
-        team1.extend(party_members_list[:members_to_add])
-        # Remove assigned members from waiting list
-        for member in party_members_list[:members_to_add]:
+        team1.extend(party_members_list)
+        # Remove these members from waiting list as they're now assigned
+        for member in party_members_list:
             if member in waiting:
                 waiting.remove(member)
-        # Add any remaining members to waiting list
-        for member in party_members_list[members_to_add:]:
-            if member not in waiting:
-                waiting.append(member)
     
-    # Since parties are limited to 2 players and we already assigned party members 
-    # of captains, we just need to ensure no duplicates in waiting list
-    waiting = list(set(waiting))
-    
-    # Double check team sizes (should never be needed now since parties are max 2 players)
+    # Assign party members to teams, ensuring balance
+    for leader, members in party_members.items():
+        if str(getattr(captain1, 'id', captain1)) == leader:
+            for m in members:
+                if m not in team1 and m not in team2:
+                    team1.append(m)
+        elif str(getattr(captain2, 'id', captain2)) == leader:
+            for m in members:
+                if m not in team2 and m not in team1:
+                    team2.append(m)
+    # If teams are unbalanced, move extra party members to waiting
     while len(team1) > 5:
-        extra = team1.pop()
-        if extra not in waiting:
-            waiting.append(extra)
+        waiting.append(team1.pop())
     while len(team2) > 5:
         waiting.append(team2.pop())
 
-    # Determine first pick based on team sizes and CT priority
-    if len(team1) == len(team2):
-        # If teams are equal size (both have 2 from parties or both have 1), CT (team1) gets first pick
-        first_pick = captain1
-    else:
-        # Otherwise, team with fewer players gets first pick
-        first_pick = captain1 if len(team1) < len(team2) else captain2
-    
     st = {
         'team1': team1,
         'team2': team2,
         'waiting': waiting,
         'captain_ct': captain1,
         'captain_t': captain2,
-        'pick_turn': first_pick,  # Assigned based on team sizes and CT priority
+        'pick_turn': captain1 if len(team1) <= len(team2) else captain2,  # Give first pick to team with fewer players
         'picks_made': 0,
         'lock': asyncio.Lock(),
         'message_id': None
     }
     active_picks[chan_id] = st
 
-    # Update or create the lobby message
+    # Edit or create the single status message for this lobby
+    status = lobby_status.get(chan_id, {})
+    msg = None
+    if status.get("message_id"):
+        try:
+            msg = await channel.fetch_message(status["message_id"])
+        except Exception:
+            msg = None
+
     embed = build_roster_embed(st)
     view = DraftView(chan_id)
-    
-    try:
-        # Get current status first
-        status = lobby_status.get(chan_id, {})
-        
-        # Update or send message using helper
-        msg = await update_or_send_message(
-            channel,
-            status.get("message_id"),
-            embed=embed,
-            view=view
-        )
+    if msg:
+        try:
+            await msg.edit(embed=embed, view=view, content=None)
+        except Exception:
+            new_msg = await channel.send(embed=embed, view=view)
+            st['message_id'] = new_msg.id
+            lobby_status[chan_id] = {"message_id": new_msg.id, "state": "picking"}
+            return
         st['message_id'] = msg.id
-        
-        # Update lobby status
         lobby_status[chan_id] = {"message_id": msg.id, "state": "picking"}
-        
-    except Exception as e:
-        print(f"Error updating lobby message: {e}")
-        # Ensure we don't leave the pick session in a broken state
-        if chan_id in active_picks:
-            del active_picks[chan_id]
-        raise
+    else:
+        new_msg = await channel.send(embed=embed, view=view)
+        st['message_id'] = new_msg.id
+        lobby_status[chan_id] = {"message_id": new_msg.id, "state": "picking"}
 
 # ---------- Cancel session helper ----------
 async def cancel_session_and_reset(channel_id, reason="A player left. Lobby reset.", leaver_id=None):
@@ -1967,20 +1635,14 @@ async def on_voice_state_update(member, before, after):
 
         # start if enough players present
         if count >= required:
-            # Update status message to show starting picking
-            status = lobby_status.get(text_ch.id, {})
-            embed = discord.Embed(title="✅ Lobby full — starting picking stage...", color=discord.Color.green())
+            # edit status message to show starting picking
+            status_msg_id = lobby_status[text_ch.id]["message_id"]
             try:
-                await update_or_send_message(
-                    text_ch,
-                    status.get("message_id"),
-                    embed=embed,
-                    view=None
-                )
-            except Exception as e:
-                print(f"Error updating lobby status: {e}")
-            
-            # Start the picking stage
+                status_msg = await text_ch.fetch_message(status_msg_id)
+                embed = discord.Embed(title="✅ Lobby full — starting picking stage...", color=discord.Color.green())
+                await status_msg.edit(embed=embed, view=None)
+            except Exception:
+                pass
             await start_picking_stage(text_ch, lobby.members)
 
 # ---------- Commands ----------
@@ -2423,22 +2085,14 @@ async def timeout_status(interaction: discord.Interaction):
 @discord.app_commands.describe(player="The player to remove timeout from")
 @commands.has_permissions(administrator=True)
 async def remove_timeout(interaction: discord.Interaction, player: discord.Member):
-    """Remove timeout from a player"""
     user_id = str(player.id)
-    was_timed_out = user_id in timeouts
     
-    if was_timed_out:
+    if user_id in timeouts:
         del timeouts[user_id]
         save_timeouts()
-        
-    embed = discord.Embed(
-        title="✅ Timeout Removed" if was_timed_out else "❌ Not Timed Out",
-        description=f"Timeout removed for {player.display_name}" if was_timed_out else f"{player.display_name} is not timed out",
-        color=discord.Color.green() if was_timed_out else discord.Color.red()
-    )
-    await interaction.response.send_message(embed=embed, ephemeral=True)
-
-
+        await interaction.response.send_message(f"✅ Timeout removed for {player.display_name}", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"❌ {player.display_name} is not timed out", ephemeral=True)
 
 
 if __name__ == '__main__':
