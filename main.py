@@ -6,6 +6,28 @@ import asyncio, random, uuid, json, pathlib, re, time
 from datetime import datetime, timedelta
 from startup_utils import load_startup_data, save_json_safe
 
+# ---------- Progress Tracking ----------
+def update_startup_progress(current_step, total_steps, start_time, status_message):
+    """Display startup progress with status message"""
+    length = 50  # Progress bar length
+    percent = float(current_step) * 100 / total_steps
+    filled_length = int(length * current_step // total_steps)
+    bar = '█' * filled_length + '-' * (length - filled_length)
+    
+    # Calculate time elapsed
+    elapsed_time = time.time() - start_time
+    if current_step > 0:
+        items_per_second = current_step / elapsed_time
+        remaining_items = total_steps - current_step
+        eta_seconds = remaining_items / items_per_second if items_per_second > 0 else 0
+        eta = f"ETA: {int(eta_seconds)}s"
+    else:
+        eta = "ETA: calculating..."
+    
+    print(f'\r[STARTUP] |{bar}| {percent:.1f}% - Step {current_step}/{total_steps} - {status_message} - {eta}', end='', flush=True)
+    if current_step == total_steps:
+        print()  # New line when complete
+
 # ---------- Intents & Bot ----------
 intents = discord.Intents.default()
 intents.members = True            # privileged; enable in Dev Portal
@@ -1491,24 +1513,42 @@ from ban_checker import check_banned_players
 @bot.event
 async def on_ready():
     print('='*50)
-    print(f'[STARTUP] Bot logged in as {bot.user} (ID: {bot.user.id})')
-    print(f'[STARTUP] Connected to Discord API')
+    startup_start = time.time()
+    total_steps = 6  # Total number of startup steps
+    current_step = 0
+
+    # Step 1: Bot Login
+    current_step += 1
+    update_startup_progress(current_step, total_steps, startup_start, "Logging in to Discord")
+    print(f'\n[STARTUP] Bot logged in as {bot.user} (ID: {bot.user.id})')
     
-    print('[STARTUP] Loading timeouts...')
+    # Step 2: Discord API Connection
+    current_step += 1
+    update_startup_progress(current_step, total_steps, startup_start, "Connecting to Discord API")
+    await asyncio.sleep(0.5)  # Brief pause to show progress
+    
+    # Step 3: Load Timeouts
+    current_step += 1
+    update_startup_progress(current_step, total_steps, startup_start, "Loading timeouts")
     global timeouts
     timeouts = load_timeouts()
-    print(f'[STARTUP] Loaded {len(timeouts)} active timeouts')
     
-    # Start ban check in background
+    # Step 4: Load Guild
+    current_step += 1
+    update_startup_progress(current_step, total_steps, startup_start, "Connecting to guild")
     try:
-        print('[STARTUP] Getting guild...')
         guild = bot.get_guild(config.GUILD_ID)
         if guild:
-            print(f'[STARTUP] Connected to guild: {guild.name} (ID: {guild.id})')
-            print('[STARTUP] Starting banned players check in background...')
+            # Step 5: Initialize Guild Connection
+            current_step += 1
+            update_startup_progress(current_step, total_steps, startup_start, f"Connected to {guild.name}")
+            
+            # Step 6: Start Ban Check
+            current_step += 1
+            update_startup_progress(current_step, total_steps, startup_start, "Starting ban check")
             bot.loop.create_task(_check_bans_and_report(guild))
         else:
-            print('[STARTUP] WARNING: Could not find configured guild!')
+            print('\n[STARTUP] WARNING: Could not find configured guild!')
     except Exception as e:
         print(f'[STARTUP] Error initiating ban check: {e}')
     
