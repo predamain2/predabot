@@ -191,8 +191,7 @@ def get_level_role(level):
 def label_for(m):
     """Get the display label for a player in the team list"""
     p = player_data.get(key_of(m)) or ensure_player(m)
-    role_id = get_level_role(p.get('level', 1))
-    return f"<@&{role_id}> {p['nick']}"
+    return p['nick']  # Just show the nickname for now
 
 class FakeMember:
     def __init__(self, idx):
@@ -436,8 +435,8 @@ class DraftView(View):
             avg_kills = get_player_avg_kills(p['nick'])
             winrate = get_player_winrate(key_of(m))
             
-            # Get the level role for the icon
-            role = discord.Object(id=get_level_role(p.get('level', 1)))
+            # Get player level
+            player_level = p.get('level', 1)
             
             # Format the label with stats
             stats_str = f"Avg: {avg_kills:.1f} | WR: {winrate:.1f}%"
@@ -446,8 +445,7 @@ class DraftView(View):
                 discord.SelectOption(
                     label=p['nick'],
                     description=stats_str,
-                    value=str(key_of(m)),
-                    emoji=role
+                    value=str(key_of(m))
                 )
             )
 
@@ -617,8 +615,19 @@ def build_roster_embed(st):
     pick_mention = getattr(pick_turn, "mention", f"<@{id_of(pick_turn)}>")
     match_id = st.get('match_id', '—')
     e.description = f"Match ID: `{match_id}`\nNext to pick: {pick_mention}"
-    t1 = "\n".join(label_for(m) for m in st['team1']) or "—"
-    t2 = "\n".join(label_for(m) for m in st['team2']) or "—"
+    
+    # Format team lists with role mentions
+    def format_team_list(team):
+        lines = []
+        for m in team:
+            p = player_data.get(key_of(m)) or ensure_player(m)
+            role_id = get_level_role(p.get('level', 1))
+            lines.append(f"<@&{role_id}> {p['nick']}")
+        return "\n".join(lines) if lines else "—"
+    
+    t1 = format_team_list(st['team1'])
+    t2 = format_team_list(st['team2'])
+    
     e.add_field(name="Team 1 (CT)", value=t1, inline=True)
     e.add_field(name="Team 2 (T)", value=t2, inline=True)
     
