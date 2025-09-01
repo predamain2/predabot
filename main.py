@@ -25,7 +25,7 @@ def load_players():
         try:
             return json.loads(DATA_FILE.read_text())
         except Exception:
-            return {}
+            pass
     return {}
 
 def load_parties():
@@ -33,7 +33,7 @@ def load_parties():
         try:
             return json.loads(PARTIES_FILE.read_text())
         except Exception:
-            return {}
+            pass
     return {}
 
 def save_parties():
@@ -192,7 +192,7 @@ def label_for(m):
     """Get the display label for a player in the team list"""
     p = player_data.get(key_of(m)) or ensure_player(m)
     level = p.get('level', 1)
-    return f":level{level}: {p['nick']}"
+    return f"<:level{level}:{config.GUILD_ID}> {p['nick']}"
 
 class FakeMember:
     def __init__(self, idx):
@@ -334,6 +334,67 @@ class RegisterModal(discord.ui.Modal, title="Player Registration"):
         guild = interaction.guild
         member = interaction.user
 
+        nick_value = self.nick.value.strip()
+        pid_value = self.pid.value.strip()
+
+        await interaction.response.defer(ephemeral=True)
+
+        if not pid_value.isdigit():
+            await interaction.followup.send("❌ Player ID must contain only numbers.", ephemeral=True)
+            return
+
+        # Check for duplicate nick/id
+        for k, v in player_data.items():
+            if k != str(member.id):
+                if v.get('nick') == nick_value:
+                    await interaction.followup.send("❌ That nickname is already registered.", ephemeral=True)
+                    return
+                if v.get('id') == pid_value:
+                    await interaction.followup.send("❌ That Player ID is already registered.", ephemeral=True)
+                    return
+
+        # Register the player
+        player_data[str(member.id)] = {
+            "nick": nick_value,
+            "id": pid_value,
+            "level": 1,
+            "elo": config.DEFAULT_ELO,
+            "wins": 0,
+            "losses": 0,
+            "banned": False
+        }
+        save_players()
+
+        success_msg = []
+        success_msg.append(f"✅ Registered as **{nick_value}**")
+
+        try:
+            if member.id != guild.owner_id:
+                await member.edit(nick=nick_value)
+                success_msg.append("✅ Updated Discord nickname")
+        except Exception as e:
+            success_msg.append(f"❌ Could not update nickname: {str(e)}")
+
+        try:
+            level_role = guild.get_role(get_level_role(1))
+            reg_role = guild.get_role(config.ROLE_REGISTERED)
+            if level_role:
+                await member.add_roles(level_role)
+            if reg_role:
+                await member.add_roles(reg_role)
+            success_msg.append("✅ Added roles")
+        except Exception as e:
+            success_msg.append(f"❌ Could not add roles: {str(e)}")
+
+        await interaction.followup.send("\n".join(success_msg), ephemeral=True)
+
+        # Update leaderboard if available
+        general_cog = bot.get_cog('General')
+        if general_cog and hasattr(general_cog, 'update_leaderboard'):
+            await general_cog.update_leaderboard()
+        guild = interaction.guild
+        member = interaction.user
+
         # Get the values from TextInput fields
         nick_value = self.nick.value.strip()
         pid_value = self.pid.value.strip()
@@ -412,6 +473,7 @@ class RegisterView(View):
     @discord.ui.button(label="Register", style=discord.ButtonStyle.green, custom_id="standoff_register_btn")
     async def reg_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(RegisterModal())
+        await interaction.response.send_modal(RegisterModal())
 
 # ---------- Draft view (Select menu) ----------
 class DraftView(View):
@@ -421,6 +483,33 @@ class DraftView(View):
         self.build_select()
 
     def build_select(self):
+        # Clear existing items
+        for c in list(self.children):
+            self.remove_item(c)
+
+        # Get pick session state
+        st = active_picks.get(self.channel_id)
+        if not st:
+            return
+
+        # Create options for waiting players
+        opts = []
+        for m in st['waiting']:
+            label = label_for(m)
+            opts.append(discord.SelectOption(label=label, value=key_of(m)))
+
+        if not opts:
+            return
+
+        # Create and add select menu
+        select = Select(placeholder="Pick a player...", min_values=1, max_values=1, options=opts)
+
+        async def on_select(interaction: discord.Interaction):
+            picked_key = interaction.data['values'][0]
+            await handle_pick_select(interaction, self.channel_id, picked_key)
+
+        select.callback = on_select
+        self.add_item(select)
         # clear previous
         for c in list(self.children):
             self.remove_item(c)
@@ -465,6 +554,106 @@ class DraftView(View):
 
 # ---------- Core pick handler (Select) ----------
 async def handle_pick_select(interaction: discord.Interaction, channel_id: int, picked_key: str):
+    st = active_picks.get(channel_id)
+    if not st:
+        await interaction.response.send_message("Draft inactive.", ephemeral=True)
+        return
+
+    # If pick session has been canceled externally, ignore
+    async with st['lock']:
+        uid = interaction.user.id
+        current = st['pick_turn']
+
+        # normalize current id
+        current_id = id_of(current) if not isinstance(current, int) else current
+        if current_id != uid:
+            await interaction.response.send_message("It's not your turn to pick.", ephemeral=True)
+            return
+
+        # find picked object in waiting
+        picked = None
+        for m in st['waiting']:
+            if str(key_of(m)) == str(picked_key):
+                picked = m
+                break
+
+        if not picked:
+            await interaction.response.send_message("Invalid pick.", ephemeral=True)
+            return
+
+        # First, check if picked player is a party leader or member
+        picked_id = str(getattr(picked, 'id', picked))
+        party_members_to_pick = []
+
+        # If picked player is a party leader, get their party members
+        if picked_id in party_data:
+            party_members_to_pick = party_data[picked_id].get('members', [])
+            # Convert member IDs to actual member objects
+            party_members_to_pick = [m for m in st['waiting'] if str(getattr(m, 'id', m)) in party_members_to_pick]
+
+        # Check if adding the party would exceed team size
+        team_size_limit = 5
+        current_team = st['team1'] if str(key_of(current)) == str(key_of(st['captain_ct'])) else st['team2']
+        
+        if len(current_team) + len(party_members_to_pick) + 1 > team_size_limit:
+            await interaction.response.send_message("Cannot pick this player - party size would exceed team limit.", ephemeral=True)
+            return
+
+        # Assign to correct team and switch pick turn
+        if str(key_of(current)) == str(key_of(st['captain_ct'])):
+            st['team1'].append(picked)
+            st['pick_turn'] = st['captain_t']
+            for member in party_members_to_pick:
+                if member in st['waiting']:
+                    st['team1'].append(member)
+                    st['waiting'].remove(member)
+        else:
+            st['team2'].append(picked)
+            st['pick_turn'] = st['captain_ct']
+            for member in party_members_to_pick:
+                if member in st['waiting']:
+                    st['team2'].append(member)
+                    st['waiting'].remove(member)
+
+        st['waiting'].remove(picked)
+        st['picks_made'] += 1 + len(party_members_to_pick)
+
+        # Update message
+        chan = bot.get_channel(channel_id)
+        msg_id = lobby_status.get(channel_id, {}).get("message_id")
+        msg = None
+        if msg_id:
+            try:
+                msg = await chan.fetch_message(msg_id)
+            except:
+                pass
+
+        # If only one player remains, auto-assign them
+        if len(st['waiting']) == 1:
+            last_player = st['waiting'][0]
+            if len(st['team1']) < 5:
+                st['team1'].append(last_player)
+            else:
+                st['team2'].append(last_player)
+            st['waiting'].clear()
+
+        # Proceed to map ban if teams are full
+        if not st['waiting']:
+            map_cog = bot.get_cog('MapBan')
+            if map_cog:
+                await map_cog.start_map_ban(chan, st['team1'], st['team2'])
+            return
+
+        # Update view
+        new_embed = build_roster_embed(st)
+        new_view = DraftView(channel_id)
+        if msg:
+            await msg.edit(embed=new_embed, view=new_view)
+        else:
+            msg = await chan.send(embed=new_embed, view=new_view)
+            lobby_status[channel_id] = {"message_id": msg.id, "state": "picking"}
+
+        await interaction.response.defer()
     st = active_picks.get(channel_id)
     if not st:
         await interaction.response.send_message("Draft inactive.", ephemeral=True)
