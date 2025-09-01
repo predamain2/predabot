@@ -18,7 +18,10 @@ async def check_banned_players(guild) -> Set[str]:
             
         # Get all bans in one API call instead of checking each user
         try:
-            bans = [entry.user.id for entry in await guild.bans()]
+            ban_list = []
+            async for ban_entry in guild.bans():
+                ban_list.append(ban_entry.user.id)
+            bans = ban_list
         except Exception as e:
             print(f"Failed to fetch bans: {e}")
             return set()
