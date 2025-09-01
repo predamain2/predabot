@@ -4,6 +4,7 @@ from discord.ext import commands
 from discord.ui import View, Select, Button
 import asyncio, random, uuid, json, pathlib, re, time
 from datetime import datetime, timedelta
+from startup_utils import load_startup_data, save_json_safe
 
 # ---------- Intents & Bot ----------
 intents = discord.Intents.default()
