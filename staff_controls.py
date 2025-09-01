@@ -65,27 +65,58 @@ class ConfirmEditView(View):
 class StaffMatchControls(View):
     @discord.ui.button(label="Revert Scoreboard", style=discord.ButtonStyle.danger)
     async def revert_scoreboard(self, interaction: discord.Interaction, button: Button):
-        # Remove match from results.json and delete embeds/images from both channels
         try:
+            # Load necessary data
             with open("results.json", "r") as f:
                 results = json.load(f)
+            with open("players.json", "r") as f:
+                player_data = json.load(f)
+                
             match_data = results.get(self.match_id)
             if not match_data:
                 await interaction.response.send_message("Match not found in database.", ephemeral=True)
                 return
-            # Optionally revert ELO for all players in this match
+
+            # Revert player stats
             for team in ["winning_team", "losing_team"]:
                 for player in match_data[team]:
-                    # Only revert ELO if it was changed in this match
-                    # This logic can be customized as needed
-                    pass
+                    player_name = player["name"]
+                    # Find player in player_data
+                    for player_id, data in player_data.items():
+                        if data["nick"].lower() == player_name.lower():
+                            # Revert wins/losses
+                            if team == "winning_team":
+                                data["wins"] = max(0, data["wins"] - 1)
+                            else:
+                                data["losses"] = max(0, data["losses"] - 1)
+                            break
+
+            # Save updated player stats
+            with open("players.json", "w") as f:
+                json.dump(player_data, f, indent=2)
+
             # Remove match from results.json
             del results[self.match_id]
             with open("results.json", "w") as f:
                 json.dump(results, f, indent=2)
+
             # Remove embeds/images from both channels
             await remove_match_embeds(self.bot, self.match_id)
-            await interaction.response.send_message(f"✅ Scoreboard for match {self.match_id} reverted. Match ID can be submitted again.", ephemeral=True)
+
+            # Update leaderboard after reverting stats
+            general_cog = self.bot.get_cog('General')
+            if general_cog:
+                await general_cog.update_leaderboard()
+
+            await interaction.response.send_message(
+                f"✅ Match {self.match_id} has been reverted:\n"
+                f"• Removed from results database\n"
+                f"• Player stats updated\n"
+                f"• Embeds deleted\n"
+                f"• Leaderboard refreshed\n"
+                f"The match ID can be submitted again.", 
+                ephemeral=True
+            )
         except Exception as e:
             await interaction.response.send_message(f"Error reverting scoreboard: {str(e)}", ephemeral=True)
     def __init__(self, match_id, match_data, bot):
