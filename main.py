@@ -191,7 +191,8 @@ def get_level_role(level):
 def label_for(m):
     """Get the display label for a player in the team list"""
     p = player_data.get(key_of(m)) or ensure_player(m)
-    return p['nick']  # Just show the nickname for now
+    level = p.get('level', 1)
+    return f":level{level}: {p['nick']}"
 
 class FakeMember:
     def __init__(self, idx):
@@ -435,32 +436,21 @@ class DraftView(View):
             avg_kills = get_player_avg_kills(p['nick'])
             winrate = get_player_winrate(key_of(m))
             
-            # Get player level and role icon
-            player_level = p.get('level', 1)
-            role_id = get_level_role(player_level)
-            
-            # Try to get role icon
-            guild = bot.get_guild(config.GUILD_ID)
-            icon_url = get_role_icon(guild, role_id)
+            # Get player level
+            level = p.get('level', 1)
             
             # Format the label with stats
             stats_str = f"Avg: {avg_kills:.1f} | WR: {winrate:.1f}%"
             
-            # Create select option with icon if available
-            option = discord.SelectOption(
-                label=p['nick'],
-                description=stats_str,
-                value=str(key_of(m))
+            # Create select option with level emoji
+            opts.append(
+                discord.SelectOption(
+                    label=p['nick'],
+                    description=stats_str,
+                    value=str(key_of(m)),
+                    emoji=f"level{level}"  # Use custom emoji name
+                )
             )
-            
-            if icon_url:
-                try:
-                    # Try to use a small unicode symbol that matches your role icon style
-                    option.emoji = "⬢"  # Hexagon shape, you can change this
-                except:
-                    pass
-                    
-            opts.append(option)
 
         if not opts:
             return
