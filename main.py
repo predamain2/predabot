@@ -435,15 +435,16 @@ class DraftView(View):
             avg_kills = get_player_avg_kills(p['nick'])
             winrate = get_player_winrate(key_of(m))
             
-            # Get player level
+            # Get player level and emoji
             player_level = p.get('level', 1)
+            level_emoji = f"<:level{player_level}:{config.LEVEL_EMOJIS.get(player_level, '')}>"
             
-            # Format the label with stats
+            # Format the label with level emoji and stats
             stats_str = f"Avg: {avg_kills:.1f} | WR: {winrate:.1f}%"
             
             opts.append(
                 discord.SelectOption(
-                    label=p['nick'],
+                    label=f"{level_emoji} {p['nick']}",
                     description=stats_str,
                     value=str(key_of(m))
                 )
@@ -955,18 +956,26 @@ async def cancel_session_and_reset(channel_id, reason="A player left. Lobby rese
         except Exception:
             pass
 
-    # Update status message to waiting
+    # Update or delete status message based on state
     ch = bot.get_channel(channel_id)
     if not ch:
         return
     status = lobby_status.get(channel_id, {})
     msg_id = status.get("message_id")
+    current_state = status.get("state", "")
+    
     if msg_id:
         try:
             msg = await ch.fetch_message(msg_id)
-            embed = discord.Embed(title="Lobby reset", description=reason + "\n\nWaiting for players...", color=discord.Color.red())
-            await msg.edit(embed=embed, view=None, content=None)
-            # update lobby_status state
+            if current_state == "mapban":
+                # Delete the message if it was during map ban
+                await msg.delete()
+                lobby_status.pop(channel_id, None)  # Clear the status entirely
+            else:
+                # Reset to waiting state for other cases
+                embed = discord.Embed(title="Lobby reset", description=reason + "\n\nWaiting for players...", color=discord.Color.red())
+                await msg.edit(embed=embed, view=None, content=None)
+                # update lobby_status state
             lobby_status[channel_id] = {"message_id": msg.id, "state": "waiting"}
         except Exception:
             try:
