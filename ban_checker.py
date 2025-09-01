@@ -9,22 +9,26 @@ async def check_banned_players(guild) -> Set[str]:
     """
     players_file = pathlib.Path("players.json")
     if not players_file.exists():
+        print('[BAN CHECK] players.json not found')
         return set()
         
     try:
         # Load current players
+        print('[BAN CHECK] Reading players.json...')
         with open(players_file, 'r') as f:
             players = json.load(f)
+        print(f'[BAN CHECK] Loaded {len(players)} players from players.json')
             
         # Get all bans in one API call instead of checking each user
         try:
+            print('[BAN CHECK] Fetching server bans...')
             ban_list = []
             async for ban_entry in guild.bans():
                 ban_list.append(ban_entry.user.id)
             bans = ban_list
+            print(f'[BAN CHECK] Found {len(bans)} banned users in server')
         except Exception as e:
-            print(f"Failed to fetch bans: {e}")
-            return set()
+            print(f'[BAN CHECK] Failed to fetch bans: {e}')
             
         # Check which players are banned
         removed_players = set()

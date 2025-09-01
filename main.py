@@ -1489,31 +1489,49 @@ from ban_checker import check_banned_players
 
 @bot.event
 async def on_ready():
+    print('='*50)
+    print(f'[STARTUP] Bot logged in as {bot.user} (ID: {bot.user.id})')
+    print(f'[STARTUP] Connected to Discord API')
+    
+    print('[STARTUP] Loading timeouts...')
     global timeouts
     timeouts = load_timeouts()
-    print('Bot ready', bot.user)
+    print(f'[STARTUP] Loaded {len(timeouts)} active timeouts')
     
     # Start ban check in background
     try:
+        print('[STARTUP] Getting guild...')
         guild = bot.get_guild(config.GUILD_ID)
         if guild:
-            print("Starting banned players check in background...")
+            print(f'[STARTUP] Connected to guild: {guild.name} (ID: {guild.id})')
+            print('[STARTUP] Starting banned players check in background...')
             bot.loop.create_task(_check_bans_and_report(guild))
+        else:
+            print('[STARTUP] WARNING: Could not find configured guild!')
     except Exception as e:
-        print(f"Error initiating ban check: {e}")
+        print(f'[STARTUP] Error initiating ban check: {e}')
     
-    print("Bot setup complete!")
+    print('[STARTUP] Initialization complete!')
+    print('[STARTUP] Bot is now ready to receive commands')
+    print('='*50)
 
 async def _check_bans_and_report(guild):
     """Background task to check bans and report results"""
     try:
+        print('[BAN CHECK] Starting banned players check...')
+        print('[BAN CHECK] Loading players.json...')
         removed_players = await check_banned_players(guild)
+        
         if removed_players:
-            print(f"Removed {len(removed_players)} banned players from players.json")
+            print(f'[BAN CHECK] Removed {len(removed_players)} banned players from players.json:')
             for player_id in removed_players:
-                print(f"- Removed banned player: {player_id}")
+                print(f'[BAN CHECK] - Removed banned player: {player_id}')
+        else:
+            print('[BAN CHECK] No banned players found in players.json')
+        
+        print('[BAN CHECK] Ban check complete!')
     except Exception as e:
-        print(f"Error during startup ban check: {e}")
+        print(f'[BAN CHECK] Error during ban check: {e}')
 
 @bot.event
 async def on_member_ban(guild, user):
