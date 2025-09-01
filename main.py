@@ -396,22 +396,10 @@ class DraftView(View):
 
         opts = []
         for m in st['waiting']:
-            p = player_data.get(key_of(m)) or ensure_player(m)
             label = getattr(m, "display_name", str(key_of(m)))
-            level_role = config.LEVEL_ROLES.get(p.get('level', 0), '⭐')  # Default to ⭐ if no level
-            
-            # Calculate average kills per game and winrate
-            total_games = p.get('wins', 0) + p.get('losses', 0)
-            avg_kills = round(p.get('total_kills', 0) / max(total_games, 1), 1)
-            winrate = round((p.get('wins', 0) / max(total_games, 1)) * 100, 1)
-            
-            desc = f"Avg: {avg_kills} | WR: {winrate}%"
-            opts.append(discord.SelectOption(
-                label=label[:100], 
-                description=desc[:100],
-                value=str(key_of(m)),
-                emoji=level_role
-            ))
+            p = player_data.get(key_of(m)) or ensure_player(m)
+            desc = f"Lvl {p['level']} | ELO {p['elo']} | W{p.get('wins',0)}-L{p.get('losses',0)}"
+            opts.append(discord.SelectOption(label=label[:100], description=desc[:100], value=str(key_of(m))))
 
         if not opts:
             return
@@ -579,18 +567,12 @@ def build_roster_embed(st):
     pick_mention = getattr(pick_turn, "mention", f"<@{id_of(pick_turn)}>")
     match_id = st.get('match_id', '—')
     e.description = f"Match ID: `{match_id}`\nNext to pick: {pick_mention}"
-    
-    def format_player(m, is_captain=False):
-        p = player_data.get(key_of(m))
-        level_role = config.LEVEL_ROLES.get(p.get('level', 0), '⭐')  # Default to ⭐ if no level
-        name = getattr(m, "display_name", str(key_of(m)))
-        return f"{level_role} {name}" + (" 👑" if is_captain else "")
-    
-    t1 = "\n".join(format_player(m, m == st['captain_ct']) for m in st['team1']) or "—"
-    t2 = "\n".join(format_player(m, m == st['captain_t']) for m in st['team2']) or "—"
-    
+    t1 = "\n".join(label_for(m) for m in st['team1']) or "—"
+    t2 = "\n".join(label_for(m) for m in st['team2']) or "—"
+    w = "\n".join(label_for(m) for m in st['waiting']) or "—"
     e.add_field(name="Team 1 (CT)", value=t1, inline=True)
     e.add_field(name="Team 2 (T)", value=t2, inline=True)
+    e.add_field(name="Available players", value=w, inline=False)
     return e
 
 async def announce_teams_final(channel: discord.TextChannel, match_id, chosen_map, st):
