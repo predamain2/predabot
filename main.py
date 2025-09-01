@@ -192,7 +192,8 @@ def label_for(m):
     """Get the display label for a player in the team list"""
     p = player_data.get(key_of(m)) or ensure_player(m)
     level = p.get('level', 1)
-    return f"<:level{level}:{config.GUILD_ID}> {p['nick']}"
+    # Use a simple text format instead of custom emoji
+    return f"[Lvl {level}] {p['nick']}"
 
 class FakeMember:
     def __init__(self, idx):
@@ -376,13 +377,22 @@ class RegisterModal(discord.ui.Modal, title="Player Registration"):
             success_msg.append(f"❌ Could not update nickname: {str(e)}")
 
         try:
+            roles_to_add = []
             level_role = guild.get_role(get_level_role(1))
             reg_role = guild.get_role(config.ROLE_REGISTERED)
+            
             if level_role:
-                await member.add_roles(level_role)
+                roles_to_add.append(level_role)
             if reg_role:
-                await member.add_roles(reg_role)
-            success_msg.append("✅ Added roles")
+                roles_to_add.append(reg_role)
+                
+            if roles_to_add:
+                await member.add_roles(*roles_to_add)
+                success_msg.append("✅ Added roles")
+            else:
+                success_msg.append("⚠️ No roles to add (roles not found)")
+        except discord.Forbidden:
+            success_msg.append("❌ Could not add roles: Missing permissions")
         except Exception as e:
             success_msg.append(f"❌ Could not add roles: {str(e)}")
 
@@ -815,17 +825,12 @@ def build_roster_embed(st):
     match_id = st.get('match_id', '—')
     e.description = f"Match ID: `{match_id}`\nNext to pick: {pick_mention}"
     
-    # Format team lists with role icons
+    # Format team lists
     def format_team_list(team, guild):
         lines = []
         for m in team:
-            p = player_data.get(key_of(m)) or ensure_player(m)
-            role_id = get_level_role(p.get('level', 1))
-            icon_url = get_role_icon(guild, role_id)
-            if icon_url:
-                lines.append(f"[⬢]({icon_url}) {p['nick']}")  # Using a small shape as placeholder, linked to icon
-            else:
-                lines.append(f"• {p['nick']}")  # Fallback to bullet point if no icon
+            label = label_for(m)  # Using our simplified label_for function
+            lines.append(label)
         return "\n".join(lines) if lines else "—"
     
     guild = bot.get_guild(config.GUILD_ID)
