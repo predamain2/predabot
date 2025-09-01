@@ -435,19 +435,32 @@ class DraftView(View):
             avg_kills = get_player_avg_kills(p['nick'])
             winrate = get_player_winrate(key_of(m))
             
-            # Get player level
+            # Get player level and role icon
             player_level = p.get('level', 1)
+            role_id = get_level_role(player_level)
+            
+            # Try to get role icon
+            guild = bot.get_guild(config.GUILD_ID)
+            icon_url = get_role_icon(guild, role_id)
             
             # Format the label with stats
             stats_str = f"Avg: {avg_kills:.1f} | WR: {winrate:.1f}%"
             
-            opts.append(
-                discord.SelectOption(
-                    label=p['nick'],
-                    description=stats_str,
-                    value=str(key_of(m))
-                )
+            # Create select option with icon if available
+            option = discord.SelectOption(
+                label=p['nick'],
+                description=stats_str,
+                value=str(key_of(m))
             )
+            
+            if icon_url:
+                try:
+                    # Try to use a small unicode symbol that matches your role icon style
+                    option.emoji = "⬢"  # Hexagon shape, you can change this
+                except:
+                    pass
+                    
+            opts.append(option)
 
         if not opts:
             return
@@ -609,6 +622,13 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
         await interaction.response.defer()
 
 # ---------- Embeds / announce ----------
+def get_role_icon(guild, role_id):
+    """Get the role icon from the guild, if available"""
+    role = guild.get_role(role_id)
+    if role and role.icon:
+        return role.icon.url
+    return None
+
 def build_roster_embed(st):
     e = discord.Embed(title="Match Draft — Pick Phase", color=discord.Color.blurple())
     pick_turn = st.get('pick_turn')
@@ -616,17 +636,22 @@ def build_roster_embed(st):
     match_id = st.get('match_id', '—')
     e.description = f"Match ID: `{match_id}`\nNext to pick: {pick_mention}"
     
-    # Format team lists with role mentions
-    def format_team_list(team):
+    # Format team lists with role icons
+    def format_team_list(team, guild):
         lines = []
         for m in team:
             p = player_data.get(key_of(m)) or ensure_player(m)
             role_id = get_level_role(p.get('level', 1))
-            lines.append(f"<@&{role_id}> {p['nick']}")
+            icon_url = get_role_icon(guild, role_id)
+            if icon_url:
+                lines.append(f"[⬢]({icon_url}) {p['nick']}")  # Using a small shape as placeholder, linked to icon
+            else:
+                lines.append(f"• {p['nick']}")  # Fallback to bullet point if no icon
         return "\n".join(lines) if lines else "—"
     
-    t1 = format_team_list(st['team1'])
-    t2 = format_team_list(st['team2'])
+    guild = bot.get_guild(config.GUILD_ID)
+    t1 = format_team_list(st['team1'], guild)
+    t2 = format_team_list(st['team2'], guild)
     
     e.add_field(name="Team 1 (CT)", value=t1, inline=True)
     e.add_field(name="Team 2 (T)", value=t2, inline=True)
