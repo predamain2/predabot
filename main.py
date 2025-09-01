@@ -616,13 +616,14 @@ def build_roster_embed(st):
     match_id = st.get('match_id', '—')
     e.description = f"Match ID: `{match_id}`\nNext to pick: {pick_mention}"
     
-    # Format team lists with role mentions
+    # Format team lists with custom level emojis
     def format_team_list(team):
         lines = []
         for m in team:
             p = player_data.get(key_of(m)) or ensure_player(m)
-            role_id = get_level_role(p.get('level', 1))
-            lines.append(f"<@&{role_id}> {p['nick']}")
+            level = p.get('level', 1)
+            level_emoji = f"<:level{level}:{config.LEVEL_EMOJIS.get(level, '')}>"
+            lines.append(f"{level_emoji} {p['nick']}")
         return "\n".join(lines) if lines else "—"
     
     t1 = format_team_list(st['team1'])
