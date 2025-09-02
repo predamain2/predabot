@@ -487,14 +487,26 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
             await interaction.response.send_message("Player not available.", ephemeral=True)
             return
 
-        # First, check if picked player is a party leader or member
+        # Check if player is already in team1 or team2
         picked_id = str(getattr(picked, 'id', picked))
+        for team_member in st['team1'] + st['team2']:
+            if str(getattr(team_member, 'id', team_member)) == picked_id:
+                await interaction.response.send_message("This player is already in a team.", ephemeral=True)
+                return
+
         party_members_to_pick = []
         
         # If picked player is a party leader, get their party members
         if picked_id in party_data:
+            # Add party members that aren't already in teams
             for member_id in party_data[picked_id]['members']:
-                if member_id != picked_id:  # Skip leader as they're already being picked
+                # Skip if member is already in a team
+                already_in_team = False
+                for team_member in st['team1'] + st['team2']:
+                    if str(getattr(team_member, 'id', team_member)) == member_id:
+                        already_in_team = True
+                        break
+                if not already_in_team:
                     for m in st['waiting']:
                         if str(getattr(m, 'id', m)) == member_id:
                             party_members_to_pick.append(m)
@@ -503,9 +515,17 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
             # Check if picked player is a party member
             for leader_id, party in party_data.items():
                 if picked_id in party['members']:
-                    # Add leader and other members if they're still in waiting
+                    # Skip any members already in teams
                     for member_id in party['members']:
-                        if member_id != picked_id:  # Skip the picked player
+                        if member_id == picked_id:  # Skip the picked player
+                            continue
+                        # Check if member is already in a team
+                        already_in_team = False
+                        for team_member in st['team1'] + st['team2']:
+                            if str(getattr(team_member, 'id', team_member)) == member_id:
+                                already_in_team = True
+                                break
+                        if not already_in_team:
                             for m in st['waiting']:
                                 if str(getattr(m, 'id', m)) == member_id:
                                     party_members_to_pick.append(m)
@@ -830,34 +850,23 @@ async def start_picking_stage(channel, member_list):
     team1 = [captain1]
     team2 = [captain2]
     waiting = []
-    assigned_members = {key_of(captain1), key_of(captain2)}  # Track assigned members
     
     # First, auto-assign party member of captain1 to team1
     captain1_id = str(getattr(captain1, 'id', captain1))
-    if captain1_id in party_members and party_members[captain1_id]:
-        for member in party_members[captain1_id]:
-            member_id = str(getattr(member, 'id', member))
-            if member_id not in assigned_members:  # Only add if not already assigned
-                team1.append(member)
-                assigned_members.add(member_id)
+    if captain1_id in party_members and party_members[captain1_id]:  # Check if captain1 has party members
+        party_member = party_members[captain1_id][0]  # Get first party member
+        team1.append(party_member)
         
     # Then auto-assign party member of captain2 to team2
     captain2_id = str(getattr(captain2, 'id', captain2))
-    if captain2_id in party_members and party_members[captain2_id]:
-        for member in party_members[captain2_id]:
-            member_id = str(getattr(member, 'id', member))
-            if member_id not in assigned_members:  # Only add if not already assigned
-                team2.append(member)
-                assigned_members.add(member_id)
+    if captain2_id in party_members and party_members[captain2_id]:  # Check if captain2 has party members
+        party_member = party_members[captain2_id][0]  # Get first party member
+        team2.append(party_member)
         
     # Add remaining party members to waiting list (party leaders who aren't captains + their members)
     for leader_id, members in party_members.items():
         if leader_id not in [str(getattr(captain1, 'id', captain1)), str(getattr(captain2, 'id', captain2))]:
-            for member in members:
-                member_id = str(getattr(member, 'id', member))
-                if member_id not in assigned_members:  # Only add if not already assigned
-                    waiting.append(member)
-                    assigned_members.add(member_id)
+            waiting.extend(members)  # Add the one member to waiting list
             
     # Finally add remaining non-party members
     remaining_members = [p for p in participants if p not in (captain1, captain2) and p not in waiting]
