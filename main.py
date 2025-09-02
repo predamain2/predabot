@@ -905,22 +905,28 @@ async def start_picking_stage(channel, member_list):
 
     chan_id = channel.id
     
-    # Add remaining players to waiting list, excluding auto-assigned party members
-    remaining_members = [p for p in participants 
-                        if p not in team1 
-                        and p not in team2 
-                        and p not in auto_assigned_members]
-    waiting.extend(remaining_members)
+    # Add only available players to waiting list
+    for p in participants:
+        # Skip if player is:
+        # 1. In team1
+        # 2. In team2
+        # 3. Was auto-assigned as a party member
+        # 4. Already assigned (using assigned_ids)
+        if (p not in team1 and 
+            p not in team2 and 
+            p not in auto_assigned_members and
+            str(getattr(p, 'id', p)) not in assigned_ids):
+            waiting.append(p)
     
-    # Double check team sizes
+    # Double check team sizes (shouldn't be needed anymore)
     while len(team1) > 5:
         extra = team1.pop()
-        if extra not in waiting:
+        if extra not in waiting and extra not in auto_assigned_members:
             waiting.append(extra)
             
     while len(team2) > 5:
         extra = team2.pop()
-        if extra not in waiting:
+        if extra not in waiting and extra not in auto_assigned_members:
             waiting.append(extra)
     
     # Since parties are limited to 2 players and we already assigned party members 
