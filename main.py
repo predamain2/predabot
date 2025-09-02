@@ -863,36 +863,43 @@ async def start_picking_stage(channel, member_list):
     # Initialize teams with captains
     team1 = [captain1]
     team2 = [captain2]
-    assigned = {str(getattr(captain1, 'id', captain1)), str(getattr(captain2, 'id', captain2))}
+    
+    # Simple set to track all assigned player IDs
+    assigned_ids = {str(getattr(captain1, 'id', captain1)), str(getattr(captain2, 'id', captain2))}
     waiting = []
     
-    # Helper function to find participant by ID
-    def find_participant_by_id(pid):
-        return next((p for p in participants if str(getattr(p, 'id', p)) == pid), None)
-    
-    # Auto-assign party members to their leaders if they are captains
+    # Handle party member assignment for captain1 (CT)
     captain1_id = str(getattr(captain1, 'id', captain1))
     if captain1_id in party_data:
-        for member_id in party_data[captain1_id]['members']:
-            if member_id not in assigned:
-                member = find_participant_by_id(member_id)
-                if member:
-                    team1.append(member)
-                    assigned.add(member_id)
+        # Get party member IDs excluding the captain
+        member_ids = [mid for mid in party_data[captain1_id]['members'] 
+                     if mid != captain1_id and mid not in assigned_ids]
+        # Add first party member only
+        if member_ids:
+            for m in participants:
+                if str(getattr(m, 'id', m)) == member_ids[0]:
+                    team1.append(m)
+                    assigned_ids.add(member_ids[0])
+                    break
     
+    # Handle party member assignment for captain2 (T)
     captain2_id = str(getattr(captain2, 'id', captain2))
     if captain2_id in party_data:
-        for member_id in party_data[captain2_id]['members']:
-            if member_id not in assigned:
-                member = find_participant_by_id(member_id)
-                if member:
-                    team2.append(member)
-                    assigned.add(member_id)
+        # Get party member IDs excluding the captain
+        member_ids = [mid for mid in party_data[captain2_id]['members']
+                     if mid != captain2_id and mid not in assigned_ids]
+        # Add first party member only
+        if member_ids:
+            for m in participants:
+                if str(getattr(m, 'id', m)) == member_ids[0]:
+                    team2.append(m)
+                    assigned_ids.add(member_ids[0])
+                    break
         
-    # Add remaining participants to waiting list
+    # Add all remaining participants to waiting list
     for p in participants:
         member_id = str(getattr(p, 'id', p))
-        if member_id not in assigned:
+        if member_id not in assigned_ids:
             waiting.append(p)
             
     # Finally add remaining non-party members
