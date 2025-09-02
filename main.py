@@ -825,67 +825,75 @@ async def start_picking_stage(channel, member_list):
         ensure_player(fake)
         idx += 1
 
-    # Shuffle non-party members
-    non_party_members = [p for p in participants if not any(p in party['members'] for leader_id, party in party_data.items())]
-    random.shuffle(non_party_members)
+    # Create sets of member IDs for easy lookup
+    party_member_ids = set()
+    for party in party_data.values():
+        party_member_ids.update(party['members'])
     
-    # Select captains prioritizing party leaders
+    # Identify truly independent players (not in any party)
+    independent_players = [p for p in participants if str(getattr(p, 'id', p)) not in party_member_ids]
+    random.shuffle(independent_players)
+    
+    # Select captains
+    captain1 = None
+    captain2 = None
+    
     if len(party_leaders) >= 2:
-        # If we have 2 or more party leaders, select the first two as captains
+        # If multiple party leaders, pick the first two
         captain1, captain2 = party_leaders[0], party_leaders[1]
     elif len(party_leaders) == 1:
-        # If we have 1 party leader, they become captain1 and pick random captain2 from non-party members
+        # One party leader becomes captain1
         captain1 = party_leaders[0]
-        non_leader_candidates = [p for p in non_party_members if p != captain1]
-        captain2 = random.choice(non_leader_candidates) if non_leader_candidates else participants[1]
-    else:
-        # No party leaders, fall back to original logic
-        if config.DEBUG_MODE and len(real_members) >= 2:
-            captain1 = real_members[0]
-            captain2 = real_members[1]
+        # Pick captain2 from independent players
+        available_players = [p for p in independent_players if p != captain1]
+        if available_players:
+            captain2 = random.choice(available_players)
         else:
-            captain1, captain2 = non_party_members[0], non_party_members[1]
+            # If no independent players, pick from non-leader participants
+            available_players = [p for p in participants if p != captain1]
+            captain2 = random.choice(available_players)
+    else:
+        # No party leaders, pick from independent players
+        if len(independent_players) >= 2:
+            captain1, captain2 = independent_players[0], independent_players[1]
+        else:
+            # Not enough independent players, use any participants
+            captain1, captain2 = participants[0], participants[1]
 
-    # Create initial teams and waiting list with party members
+    # Initialize teams with captains
     team1 = [captain1]
     team2 = [captain2]
+    assigned = {str(getattr(captain1, 'id', captain1)), str(getattr(captain2, 'id', captain2))}
     waiting = []
-    used_members = set()  # Track used members by their IDs
-    used_members.add(str(getattr(captain1, 'id', captain1)))
-    used_members.add(str(getattr(captain2, 'id', captain2)))
     
-    # First, auto-assign party member of captain1 to team1
+    # Helper function to find participant by ID
+    def find_participant_by_id(pid):
+        return next((p for p in participants if str(getattr(p, 'id', p)) == pid), None)
+    
+    # Auto-assign party members to their leaders if they are captains
     captain1_id = str(getattr(captain1, 'id', captain1))
-    if captain1_id in party_data:  # Note: using party_data instead of party_members
-        # Get the actual member objects for the party members
+    if captain1_id in party_data:
         for member_id in party_data[captain1_id]['members']:
-            if member_id not in used_members:
-                # Find the actual member object
-                for m in participants:
-                    if str(getattr(m, 'id', m)) == member_id:
-                        team1.append(m)
-                        used_members.add(member_id)
-                        break
-        
-    # Then auto-assign party member of captain2 to team2
+            if member_id not in assigned:
+                member = find_participant_by_id(member_id)
+                if member:
+                    team1.append(member)
+                    assigned.add(member_id)
+    
     captain2_id = str(getattr(captain2, 'id', captain2))
-    if captain2_id in party_data:  # Note: using party_data instead of party_members
-        # Get the actual member objects for the party members
+    if captain2_id in party_data:
         for member_id in party_data[captain2_id]['members']:
-            if member_id not in used_members:
-                # Find the actual member object
-                for m in participants:
-                    if str(getattr(m, 'id', m)) == member_id:
-                        team2.append(m)
-                        used_members.add(member_id)
-                        break
+            if member_id not in assigned:
+                member = find_participant_by_id(member_id)
+                if member:
+                    team2.append(member)
+                    assigned.add(member_id)
         
-    # Add all remaining participants to waiting list if they haven't been used
+    # Add remaining participants to waiting list
     for p in participants:
         member_id = str(getattr(p, 'id', p))
-        if member_id not in used_members:
+        if member_id not in assigned:
             waiting.append(p)
-            used_members.add(member_id)
             
     # Finally add remaining non-party members
     remaining_members = [p for p in participants if p not in (captain1, captain2) and p not in waiting]
