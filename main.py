@@ -435,18 +435,22 @@ class DraftView(View):
             avg_kills = get_player_avg_kills(p['nick'])
             winrate = get_player_winrate(key_of(m))
             
-            # Get player level and emoji
+            # Get player level and format label
             player_level = p.get('level', 1)
-            level_emoji = f"<:level{player_level}:{config.LEVEL_EMOJIS.get(player_level, '')}>"
             
-            # Format the label with level emoji and stats
+            # Format the stats string
             stats_str = f"Avg: {avg_kills:.1f} | WR: {winrate:.1f}%"
             
+            # Create select option with emoji as an actual emoji parameter
             opts.append(
                 discord.SelectOption(
-                    label=f"{level_emoji} {p['nick']}",
+                    label=p['nick'],
                     description=stats_str,
-                    value=str(key_of(m))
+                    value=str(key_of(m)),
+                    emoji=discord.PartialEmoji(
+                        name=f"level{player_level}",
+                        id=int(config.LEVEL_EMOJIS.get(player_level, 0))
+                    )
                 )
             )
 
