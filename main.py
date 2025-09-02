@@ -120,19 +120,12 @@ def add_timeout(user_id, duration=TIMEOUT_DURATION):
 
 def key_of(m):
     """Return a stable string key for member-like objects (Member or FakeMember or string/int)"""
-    print(f"\n=== key_of called with: {m} (type: {type(m)}) ===")
     if isinstance(m, (int,)):
-        result = str(m)
-        print(f"key_of: Input was integer, returning: {result}")
-        return result
+        return str(m)
     try:
-        result = str(getattr(m, "id"))
-        print(f"key_of: Got ID from object: {result}")
-        return result
-    except Exception as e:
-        result = str(m)
-        print(f"key_of: Fell back to string conversion due to {type(e)}: {result}")
-        return result
+        return str(getattr(m, "id"))
+    except Exception:
+        return str(m)
 
 def id_of(m):
     """Return integer id where possible. For FakeMember negative ids are preserved."""
@@ -837,23 +830,34 @@ async def start_picking_stage(channel, member_list):
     team1 = [captain1]
     team2 = [captain2]
     waiting = []
+    assigned_members = {key_of(captain1), key_of(captain2)}  # Track assigned members
     
     # First, auto-assign party member of captain1 to team1
     captain1_id = str(getattr(captain1, 'id', captain1))
-    if captain1_id in party_members and party_members[captain1_id]:  # Check if captain1 has party members
-        party_member = party_members[captain1_id][0]  # Get first party member
-        team1.append(party_member)
+    if captain1_id in party_members and party_members[captain1_id]:
+        for member in party_members[captain1_id]:
+            member_id = str(getattr(member, 'id', member))
+            if member_id not in assigned_members:  # Only add if not already assigned
+                team1.append(member)
+                assigned_members.add(member_id)
         
     # Then auto-assign party member of captain2 to team2
     captain2_id = str(getattr(captain2, 'id', captain2))
-    if captain2_id in party_members and party_members[captain2_id]:  # Check if captain2 has party members
-        party_member = party_members[captain2_id][0]  # Get first party member
-        team2.append(party_member)
+    if captain2_id in party_members and party_members[captain2_id]:
+        for member in party_members[captain2_id]:
+            member_id = str(getattr(member, 'id', member))
+            if member_id not in assigned_members:  # Only add if not already assigned
+                team2.append(member)
+                assigned_members.add(member_id)
         
     # Add remaining party members to waiting list (party leaders who aren't captains + their members)
     for leader_id, members in party_members.items():
         if leader_id not in [str(getattr(captain1, 'id', captain1)), str(getattr(captain2, 'id', captain2))]:
-            waiting.extend(members)  # Add the one member to waiting list
+            for member in members:
+                member_id = str(getattr(member, 'id', member))
+                if member_id not in assigned_members:  # Only add if not already assigned
+                    waiting.append(member)
+                    assigned_members.add(member_id)
             
     # Finally add remaining non-party members
     remaining_members = [p for p in participants if p not in (captain1, captain2) and p not in waiting]
