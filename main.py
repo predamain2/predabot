@@ -421,8 +421,27 @@ class DraftView(View):
         if not st:
             return
 
+        # Get all members currently in teams
+        team_members_ids = {str(getattr(m, 'id', m)) for m in st['team1'] + st['team2']}
+        
         opts = []
         for m in st['waiting']:
+            member_id = str(getattr(m, 'id', m))
+            
+            # Skip if member is already in a team
+            if member_id in team_members_ids:
+                continue
+                
+            # Skip if member is in a party and their leader is in team1/team2
+            is_party_member = False
+            for leader_id, party in party_data.items():
+                if member_id in party['members'] and leader_id in team_members_ids:
+                    is_party_member = True
+                    break
+                    
+            if is_party_member:
+                continue
+            
             # Get player data and calculate stats
             p = player_data.get(key_of(m)) or ensure_player(m)
             avg_kills = get_player_avg_kills(p['nick'])
