@@ -575,17 +575,7 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
         
         # Calculate how many players this pick would add
         total_additions = 1 + len(party_members_to_pick)
-        remaining_picks = (10 - len(st['team1']) - len(st['team2'])) // 2
         
-        # Check if this pick would leave the other team unable to fill up
-        other_team_space = team_size_limit - len(other_team)
-        if len(st['waiting']) - total_additions < other_team_space:
-            await interaction.response.send_message(
-                "This pick would leave the other team with too few players.",
-                ephemeral=True
-            )
-            return
-            
         # Check if adding these players would exceed team size
         if len(current_team) + total_additions > team_size_limit:
             await interaction.response.send_message(
