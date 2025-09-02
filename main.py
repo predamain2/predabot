@@ -898,27 +898,23 @@ async def start_picking_stage(channel, member_list):
 
     chan_id = channel.id
     
-    # Add remaining non-party members to waiting list
+    # Add remaining players to waiting list
     remaining_members = [p for p in participants 
                         if p not in team1 
                         and p not in team2 
-                        and p not in waiting]
+                        and str(getattr(p, 'id', p)) not in assigned_ids]
     waiting.extend(remaining_members)
     
-    # Double check if any party members were missed
-    if str(getattr(captain1, 'id', captain1)) in party_members:
-        party_members_list = party_members[str(getattr(captain1, 'id', captain1))]
-        # Only add up to 4 more players (5 total including captain)
-        members_to_add = min(len(party_members_list), 4)
-        team1.extend(party_members_list[:members_to_add])
-        # Remove assigned members from waiting list
-        for member in party_members_list[:members_to_add]:
-            if member in waiting:
-                waiting.remove(member)
-        # Add any remaining members to waiting list
-        for member in party_members_list[members_to_add:]:
-            if member not in waiting:
-                waiting.append(member)
+    # Double check team sizes
+    while len(team1) > 5:
+        extra = team1.pop()
+        if extra not in waiting:
+            waiting.append(extra)
+            
+    while len(team2) > 5:
+        extra = team2.pop()
+        if extra not in waiting:
+            waiting.append(extra)
     
     # Since parties are limited to 2 players and we already assigned party members 
     # of captains, we just need to ensure no duplicates in waiting list
