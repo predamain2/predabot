@@ -481,7 +481,7 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
             await interaction.response.send_message("Not your turn.", ephemeral=True)
             return
 
-        # find picked object in waiting
+        # find picked object in waiting and verify they're not already in a team
         picked = None
         for m in st['waiting']:
             if str(key_of(m)) == str(picked_key):
@@ -491,6 +491,14 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
         if not picked:
             await interaction.response.send_message("Player not available.", ephemeral=True)
             return
+            
+        # Check if player is already in a team
+        picked_id = str(getattr(picked, 'id', picked))
+        for team in [st['team1'], st['team2']]:
+            for player in team:
+                if str(getattr(player, 'id', player)) == picked_id:
+                    await interaction.response.send_message("This player is already in a team.", ephemeral=True)
+                    return
 
         # First, check if picked player is a party leader or member
         picked_id = str(getattr(picked, 'id', picked))
