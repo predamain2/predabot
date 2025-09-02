@@ -475,9 +475,10 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
         uid = interaction.user.id
         current = st['pick_turn']
 
-        # normalize current id
-        current_id = id_of(current) if not isinstance(current, int) else current
-        if current_id != uid:
+        # normalize both IDs to strings for comparison
+        current_id = str(getattr(current, 'id', current))
+        user_id = str(uid)
+        if current_id != user_id:
             await interaction.response.send_message("Not your turn.", ephemeral=True)
             return
 
