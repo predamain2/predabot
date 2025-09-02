@@ -846,27 +846,46 @@ async def start_picking_stage(channel, member_list):
         else:
             captain1, captain2 = non_party_members[0], non_party_members[1]
 
-    # Create initial teams and waiting list
+    # Create initial teams and waiting list with party members
     team1 = [captain1]
     team2 = [captain2]
     waiting = []
+    used_members = set()  # Track used members by their IDs
+    used_members.add(str(getattr(captain1, 'id', captain1)))
+    used_members.add(str(getattr(captain2, 'id', captain2)))
     
     # First, auto-assign party member of captain1 to team1
     captain1_id = str(getattr(captain1, 'id', captain1))
-    if captain1_id in party_members and party_members[captain1_id]:  # Check if captain1 has party members
-        party_member = party_members[captain1_id][0]  # Get first party member
-        team1.append(party_member)
+    if captain1_id in party_data:  # Note: using party_data instead of party_members
+        # Get the actual member objects for the party members
+        for member_id in party_data[captain1_id]['members']:
+            if member_id not in used_members:
+                # Find the actual member object
+                for m in participants:
+                    if str(getattr(m, 'id', m)) == member_id:
+                        team1.append(m)
+                        used_members.add(member_id)
+                        break
         
     # Then auto-assign party member of captain2 to team2
     captain2_id = str(getattr(captain2, 'id', captain2))
-    if captain2_id in party_members and party_members[captain2_id]:  # Check if captain2 has party members
-        party_member = party_members[captain2_id][0]  # Get first party member
-        team2.append(party_member)
+    if captain2_id in party_data:  # Note: using party_data instead of party_members
+        # Get the actual member objects for the party members
+        for member_id in party_data[captain2_id]['members']:
+            if member_id not in used_members:
+                # Find the actual member object
+                for m in participants:
+                    if str(getattr(m, 'id', m)) == member_id:
+                        team2.append(m)
+                        used_members.add(member_id)
+                        break
         
-    # Add remaining party members to waiting list (party leaders who aren't captains + their members)
-    for leader_id, members in party_members.items():
-        if leader_id not in [str(getattr(captain1, 'id', captain1)), str(getattr(captain2, 'id', captain2))]:
-            waiting.extend(members)  # Add the one member to waiting list
+    # Add all remaining participants to waiting list if they haven't been used
+    for p in participants:
+        member_id = str(getattr(p, 'id', p))
+        if member_id not in used_members:
+            waiting.append(p)
+            used_members.add(member_id)
             
     # Finally add remaining non-party members
     remaining_members = [p for p in participants if p not in (captain1, captain2) and p not in waiting]
