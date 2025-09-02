@@ -835,13 +835,15 @@ async def start_picking_stage(channel, member_list):
     waiting = []
     
     # First, auto-assign party member of captain1 to team1
-    if str(getattr(captain1, 'id', captain1)) in party_members:
-        party_member = party_members[str(getattr(captain1, 'id', captain1))][0]  # Only one member in party
+    captain1_id = str(getattr(captain1, 'id', captain1))
+    if captain1_id in party_members and party_members[captain1_id]:  # Check if captain1 has party members
+        party_member = party_members[captain1_id][0]  # Get first party member
         team1.append(party_member)
         
     # Then auto-assign party member of captain2 to team2
-    if str(getattr(captain2, 'id', captain2)) in party_members:
-        party_member = party_members[str(getattr(captain2, 'id', captain2))][0]  # Only one member in party
+    captain2_id = str(getattr(captain2, 'id', captain2))
+    if captain2_id in party_members and party_members[captain2_id]:  # Check if captain2 has party members
+        party_member = party_members[captain2_id][0]  # Get first party member
         team2.append(party_member)
         
     # Add remaining party members to waiting list (party leaders who aren't captains + their members)
