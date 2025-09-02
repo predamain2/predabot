@@ -435,18 +435,20 @@ class DraftView(View):
             avg_kills = get_player_avg_kills(p['nick'])
             winrate = get_player_winrate(key_of(m))
             
-            # Get player level and emoji
+            # Get player level
             player_level = p.get('level', 1)
-            level_emoji = f"<:level{player_level}:{config.LEVEL_EMOJIS.get(player_level, '')}>"
+            emoji_id = config.LEVEL_EMOJIS.get(player_level, '')
             
-            # Format the label with level emoji and stats
+            # Format the stats
             stats_str = f"Avg: {avg_kills:.1f} | WR: {winrate:.1f}%"
             
+            # Create select option with emoji as an emoji parameter
             opts.append(
                 discord.SelectOption(
-                    label=f"{level_emoji} {p['nick']}",
+                    label=p['nick'],
                     description=stats_str,
-                    value=str(key_of(m))
+                    value=str(key_of(m)),
+                    emoji=discord.PartialEmoji(name=f"level{player_level}", id=int(emoji_id))
                 )
             )
 
@@ -834,52 +836,27 @@ async def start_picking_stage(channel, member_list):
     team2 = [captain2]
     waiting = []
     
-    # First, auto-assign party member of captain1 to team1
+    chan_id = channel.id
+    # Assign party members to teams only once
+    # If captain1 has a party, assign all their members to team1
     if str(getattr(captain1, 'id', captain1)) in party_members:
-        party_member = party_members[str(getattr(captain1, 'id', captain1))][0]  # Only one member in party
-        team1.append(party_member)
-        
-    # Then auto-assign party member of captain2 to team2
+        team1.extend(party_members[str(getattr(captain1, 'id', captain1))])
+
+    # If captain2 has a party, assign all their members to team2
     if str(getattr(captain2, 'id', captain2)) in party_members:
-        party_member = party_members[str(getattr(captain2, 'id', captain2))][0]  # Only one member in party
-        team2.append(party_member)
-        
-    # Add remaining party members to waiting list (party leaders who aren't captains + their members)
+        team2.extend(party_members[str(getattr(captain2, 'id', captain2))])
+
+    # Add remaining party members (whose leaders aren't captains) to waiting list
     for leader_id, members in party_members.items():
         if leader_id not in [str(getattr(captain1, 'id', captain1)), str(getattr(captain2, 'id', captain2))]:
-            waiting.extend(members)  # Add the one member to waiting list
-            
-    # Finally add remaining non-party members
-    remaining_members = [p for p in participants if p not in (captain1, captain2) and p not in waiting]
+            waiting.extend(members)
+
+    # Add remaining non-party members to waiting list
+    remaining_members = [p for p in participants if p not in team1 and p not in team2 and p not in waiting and p not in (captain1, captain2)]
     waiting.extend(remaining_members)
 
-    chan_id = channel.id
-    
-    # Add remaining non-party members to waiting list
-    remaining_members = [p for p in participants 
-                        if p not in team1 
-                        and p not in team2 
-                        and p not in waiting]
-    waiting.extend(remaining_members)
-    
-    # Double check if any party members were missed
-    if str(getattr(captain1, 'id', captain1)) in party_members:
-        party_members_list = party_members[str(getattr(captain1, 'id', captain1))]
-        # Only add up to 4 more players (5 total including captain)
-        members_to_add = min(len(party_members_list), 4)
-        team1.extend(party_members_list[:members_to_add])
-        # Remove assigned members from waiting list
-        for member in party_members_list[:members_to_add]:
-            if member in waiting:
-                waiting.remove(member)
-        # Add any remaining members to waiting list
-        for member in party_members_list[members_to_add:]:
-            if member not in waiting:
-                waiting.append(member)
-    
-    # Since parties are limited to 2 players and we already assigned party members 
-    # of captains, we just need to ensure no duplicates in waiting list
-    waiting = list(set(waiting))
+    # Ensure no duplicates in waiting list
+    waiting = list(dict.fromkeys(waiting))
     
     # Double check team sizes (should never be needed now since parties are max 2 players)
     while len(team1) > 5:
