@@ -866,6 +866,7 @@ async def start_picking_stage(channel, member_list):
     team1 = [captain1]
     team2 = [captain2]
     assigned_ids = {str(getattr(captain1, 'id', captain1)), str(getattr(captain2, 'id', captain2))}
+    auto_assigned_members = []  # Track members that were auto-assigned
     waiting = []
     
     def assign_party_member(captain_id, team):
@@ -880,12 +881,18 @@ async def start_picking_stage(channel, member_list):
                         if str(getattr(m, 'id', m)) == member_id:
                             team.append(m)
                             assigned_ids.add(member_id)
-                            return True  # Successfully added a party member
-        return False
+                            # Return the member we added so we can exclude them from waiting list
+                            return m
+        return None
     
-    # Assign party members to teams
-    assign_party_member(str(getattr(captain1, 'id', captain1)), team1)
-    assign_party_member(str(getattr(captain2, 'id', captain2)), team2)
+    # Assign party members to teams and track who was auto-assigned
+    auto_member1 = assign_party_member(str(getattr(captain1, 'id', captain1)), team1)
+    if auto_member1:
+        auto_assigned_members.append(auto_member1)
+    
+    auto_member2 = assign_party_member(str(getattr(captain2, 'id', captain2)), team2)
+    if auto_member2:
+        auto_assigned_members.append(auto_member2)
         
     # Add unassigned participants to waiting list
     for p in participants:
@@ -898,11 +905,11 @@ async def start_picking_stage(channel, member_list):
 
     chan_id = channel.id
     
-    # Add remaining players to waiting list
+    # Add remaining players to waiting list, excluding auto-assigned party members
     remaining_members = [p for p in participants 
                         if p not in team1 
                         and p not in team2 
-                        and str(getattr(p, 'id', p)) not in assigned_ids]
+                        and p not in auto_assigned_members]
     waiting.extend(remaining_members)
     
     # Double check team sizes
