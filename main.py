@@ -535,20 +535,62 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
             )
             return
 
+        # First check if this player is a party member of someone already in a team
+        picked_id = str(getattr(picked, 'id', picked))
+        for leader_id, party in party_data.items():
+            # If this player is a party member
+            if picked_id in party['members']:
+                leader_in_team1 = any(str(getattr(p, 'id', p)) == leader_id for p in st['team1'])
+                leader_in_team2 = any(str(getattr(p, 'id', p)) == leader_id for p in st['team2'])
+                
+                # If their leader is already in a team, they must join that team
+                if leader_in_team1 and not str(key_of(current)) == str(key_of(st['captain_ct'])):
+                    await interaction.response.send_message(
+                        "This player must be picked by their party leader's team.",
+                        ephemeral=True
+                    )
+                    return
+                elif leader_in_team2 and not str(key_of(current)) == str(key_of(st['captain_t'])):
+                    await interaction.response.send_message(
+                        "This player must be picked by their party leader's team.",
+                        ephemeral=True
+                    )
+                    return
+
         # Assign to correct team and switch pick_turn to the other captain
         if str(key_of(current)) == str(key_of(st['captain_ct'])):
+            # Double check this player or their party members aren't in team2
+            if any(str(getattr(p, 'id', p)) == picked_id for p in st['team2']):
+                await interaction.response.send_message(
+                    "This player is already in the other team.",
+                    ephemeral=True
+                )
+                return
+                
             st['team1'].append(picked)
+            st['waiting'].remove(picked)
             # Add party members if any
             for member in party_members_to_pick:
-                st['team1'].append(member)
-                st['waiting'].remove(member)
+                if member not in st['team1'] and member not in st['team2']:
+                    st['team1'].append(member)
+                    st['waiting'].remove(member)
             st['pick_turn'] = st['captain_t']
         else:
+            # Double check this player or their party members aren't in team1
+            if any(str(getattr(p, 'id', p)) == picked_id for p in st['team1']):
+                await interaction.response.send_message(
+                    "This player is already in the other team.",
+                    ephemeral=True
+                )
+                return
+                
             st['team2'].append(picked)
+            st['waiting'].remove(picked)
             # Add party members if any
             for member in party_members_to_pick:
-                st['team2'].append(member)
-                st['waiting'].remove(member)
+                if member not in st['team1'] and member not in st['team2']:
+                    st['team2'].append(member)
+                    st['waiting'].remove(member)
             st['pick_turn'] = st['captain_ct']
 
         st['waiting'].remove(picked)
@@ -843,16 +885,33 @@ async def start_picking_stage(channel, member_list):
     team1 = [captain1]
     team2 = [captain2]
     waiting = []
+    assigned_members = set()  # Track all assigned players
     
     chan_id = channel.id
-    # Assign party members to teams only once
-    # If captain1 has a party, assign all their members to team1
-    if str(getattr(captain1, 'id', captain1)) in party_members:
-        team1.extend(party_members[str(getattr(captain1, 'id', captain1))])
+    
+    # Add captain1 to assigned members
+    assigned_members.add(str(getattr(captain1, 'id', captain1)))
+    
+    # Add captain2 to assigned members
+    assigned_members.add(str(getattr(captain2, 'id', captain2)))
+    
+    # If captain1 has a party, assign their members to team1
+    captain1_id = str(getattr(captain1, 'id', captain1))
+    if captain1_id in party_members:
+        for member in party_members[captain1_id]:
+            member_id = str(getattr(member, 'id', member))
+            if member_id not in assigned_members:
+                team1.append(member)
+                assigned_members.add(member_id)
 
-    # If captain2 has a party, assign all their members to team2
-    if str(getattr(captain2, 'id', captain2)) in party_members:
-        team2.extend(party_members[str(getattr(captain2, 'id', captain2))])
+    # If captain2 has a party, assign their members to team2
+    captain2_id = str(getattr(captain2, 'id', captain2))
+    if captain2_id in party_members:
+        for member in party_members[captain2_id]:
+            member_id = str(getattr(member, 'id', member))
+            if member_id not in assigned_members:
+                team2.append(member)
+                assigned_members.add(member_id)
 
     # Add remaining party members (whose leaders aren't captains) to waiting list
     for leader_id, members in party_members.items():
