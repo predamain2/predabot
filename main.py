@@ -149,39 +149,28 @@ def ensure_player(m):
     return player_data[k]
 
 def get_player_avg_kills(player_nick):
-    """Calculate average kills for a player from results.json and player data"""
-    # First check if there's recent match data in results.json
+    """Calculate average kills for a player from results.json"""
     total_kills = 0
     total_matches = 0
     
-    # Try to get data from results.json first
-    if results_data:
-        for match in results_data.values():
-            # Check both CT and T teams
-            for team in ['ct_team', 't_team']:
-                if team in match:
-                    for player in match[team]:
-                        if player['name'].lower() == player_nick.lower():
-                            total_kills += int(player.get('kills', 0))
-                            total_matches += 1
-                            break
+    for match in results_data.values():
+        # Check winning team
+        for player in match.get('winning_team', []):
+            if not player.get('was_absent') and player.get('name', '').lower() == player_nick.lower():
+                total_kills += int(player.get('kills', 0))
+                total_matches += 1
+                break
+                
+        # Check losing team
+        for player in match.get('losing_team', []):
+            if not player.get('was_absent') and player.get('name', '').lower() == player_nick.lower():
+                total_kills += int(player.get('kills', 0))
+                total_matches += 1
+                break
     
-    # If no data in results.json, try player_data
     if total_matches == 0:
-        for player_id, data in player_data.items():
-            if data.get('nick', '').lower() == player_nick.lower():
-                # Get total kills and matches from player stats
-                total_kills = data.get('total_kills', 0)
-                total_matches = data.get('total_matches', 0)
-                if total_matches > 0:
-                    return round(total_kills / total_matches, 1)
-    
-    # If we found matches in results.json, return that average
-    if total_matches > 0:
-        return round(total_kills / total_matches, 1)
-        
-    # No data found in either source
-    return 0.0
+        return 0.0
+    return round(total_kills / total_matches, 1)
 
 def get_player_winrate(player_id):
     """Calculate winrate percentage for a player"""
@@ -1457,18 +1446,6 @@ async def on_message(message: discord.Message):
 
     # Ensure missing players are included in the final results
     # Store the submission in results.json
-    # Update player statistics with match data
-    match_stats = {
-        "ct_team": winning_team if ct_won else losing_team,
-        "t_team": losing_team if ct_won else winning_team
-    }
-    from match_processor import update_player_stats
-    update_player_stats(player_data, match_stats)
-    
-    # Save updated player stats
-    save_players()
-
-    # Store match in results
     results_data[match_id] = {
         "match_id": match_id,
         "submitter_id": message.author.id,

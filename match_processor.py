@@ -184,21 +184,6 @@ def _build_expected_rosters(original_match: dict, player_data: dict) -> tuple[di
                 player_dict[nick] = {"id": discord_id, "data": player_data[discord_id]}
     return team1_players, team2_players
 
-def update_player_stats(player_data, match_data):
-    """Update player statistics when a match is processed"""
-    # Process both teams
-    for team in ['ct_team', 't_team']:
-        if team in match_data:
-            for player in match_data[team]:
-                player_nick = player['name'].lower()
-                # Find player in player_data
-                for player_id, data in player_data.items():
-                    if data.get('nick', '').lower() == player_nick:
-                        # Update total kills and matches
-                        data['total_kills'] = data.get('total_kills', 0) + int(player.get('kills', 0))
-                        data['total_matches'] = data.get('total_matches', 0) + 1
-                        break
-
 def _find_best_player_matches(
     scoreboard_players: list[dict], expected_names: list[str]
 ) -> dict[str, str]:
