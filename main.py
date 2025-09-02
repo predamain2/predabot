@@ -942,11 +942,19 @@ async def start_picking_stage(channel, member_list):
     team2 = [captain2]
     waiting = []
     assigned_members = set()  # Track all assigned players
+    
+    # Add captains to assigned members
+    assigned_members.add(str(getattr(captain1, 'id', captain1)))
+    assigned_members.add(str(getattr(captain2, 'id', captain2)))
 
     # Automatically assign party member to captain1's team if captain1 is a party leader
     captain1_id = str(getattr(captain1, 'id', captain1))
     if captain1_id in party_member_assignments:
-        team1.append(party_member_assignments[captain1_id])
+        member = party_member_assignments[captain1_id]
+        member_id = str(getattr(member, 'id', member))
+        if member_id not in assigned_members:  # Only add if not already assigned
+            team1.append(member)
+            assigned_members.add(member_id)
     
     chan_id = channel.id
     
@@ -979,11 +987,11 @@ async def start_picking_stage(channel, member_list):
         if leader_id not in [str(getattr(captain1, 'id', captain1)), str(getattr(captain2, 'id', captain2))]:
             waiting.extend(members)
 
-    # Add remaining non-party members to waiting list
-    remaining_members = [p for p in participants if p not in team1 and p not in team2 and p not in waiting and p not in (captain1, captain2)]
-    waiting.extend(remaining_members)
+    # Add remaining players to waiting list (excluding those already assigned)
+    waiting = [p for p in participants 
+              if str(getattr(p, 'id', p)) not in assigned_members]
 
-    # Ensure no duplicates in waiting list
+    # Just in case - ensure no duplicates in waiting list
     waiting = list(dict.fromkeys(waiting))
     
     # Double check team sizes (should never be needed now since parties are max 2 players)
