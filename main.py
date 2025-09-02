@@ -524,11 +524,18 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
             # Check if party leader or member is already in a team
             leader_in_team1 = any(str(getattr(p, 'id', p)) == party_leader for p in st['team1'])
             leader_in_team2 = any(str(getattr(p, 'id', p)) == party_leader for p in st['team2'])
-
+            
+            # If leader is in a team, validate the current picker is from that team
             if leader_in_team1 or leader_in_team2:
-                target_team = 'team1' if leader_in_team1 else 'team2'
-                wrong_team = 'team2' if leader_in_team1 else 'team1'
-                current_team = 'team1' if str(key_of(current)) == str(key_of(st['captain_ct'])) else 'team2'
+                is_ct_picking = str(key_of(current)) == str(key_of(st['captain_ct']))
+                should_be_ct = leader_in_team1
+                
+                if is_ct_picking != should_be_ct:
+                    await interaction.response.send_message(
+                        "Party members must be picked by the team their leader is in.",
+                        ephemeral=True
+                    )
+                    return
 
                 if current_team != target_team:
                     await interaction.response.send_message(
@@ -560,11 +567,27 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
                                 party_members_to_pick.append(m)
                                 break
 
-        # Check if adding the party would exceed team size
+        # Validate team size including potential party members
         team_size_limit = 5  # Standard team size
-        current_team = st['team1'] if str(key_of(current)) == str(key_of(st['captain_ct'])) else st['team2']
+        is_ct_pick = str(key_of(current)) == str(key_of(st['captain_ct']))
+        current_team = st['team1'] if is_ct_pick else st['team2']
+        other_team = st['team2'] if is_ct_pick else st['team1']
         
-        if len(current_team) + len(party_members_to_pick) + 1 > team_size_limit:
+        # Calculate how many players this pick would add
+        total_additions = 1 + len(party_members_to_pick)
+        remaining_picks = (10 - len(st['team1']) - len(st['team2'])) // 2
+        
+        # Check if this pick would leave the other team unable to fill up
+        other_team_space = team_size_limit - len(other_team)
+        if len(st['waiting']) - total_additions < other_team_space:
+            await interaction.response.send_message(
+                "This pick would leave the other team with too few players.",
+                ephemeral=True
+            )
+            return
+            
+        # Check if adding these players would exceed team size
+        if len(current_team) + total_additions > team_size_limit:
             await interaction.response.send_message(
                 "Cannot pick this player - their party would exceed team size limit.",
                 ephemeral=True
@@ -658,14 +681,37 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
             except Exception:
                 msg = None
 
-        # If only one player remains, auto-assign them to the correct team
-        if len(st['waiting']) == 1:
-            last_player = st['waiting'].pop(0)
-            # Assign to the team whose turn it is
-            if str(key_of(st['pick_turn'])) == str(key_of(st['captain_ct'])):
-                st['team1'].append(last_player)
-            else:
-                st['team2'].append(last_player)
+        # Handle remaining players
+        if len(st['waiting']) <= 2:
+            # Identify teams that need players
+            team1_needs = 5 - len(st['team1'])
+            team2_needs = 5 - len(st['team2'])
+            
+            # Auto-assign remaining players to maintain balance
+            while st['waiting'] and (team1_needs > 0 or team2_needs > 0):
+                last_player = st['waiting'].pop(0)
+                
+                # Check if player is part of a party that's already in a team
+                player_id = str(getattr(last_player, 'id', last_player))
+                forced_team = None
+                
+                # Check if player belongs in a specific team due to party
+                for leader_id, party in party_data.items():
+                    if player_id in party['members']:
+                        leader_in_team1 = any(str(getattr(p, 'id', p)) == leader_id for p in st['team1'])
+                        leader_in_team2 = any(str(getattr(p, 'id', p)) == leader_id for p in st['team2'])
+                        if leader_in_team1:
+                            forced_team = 'team1'
+                        elif leader_in_team2:
+                            forced_team = 'team2'
+                
+                # Assign based on party constraints or team needs
+                if forced_team == 'team1' or (not forced_team and team1_needs >= team2_needs):
+                    st['team1'].append(last_player)
+                    team1_needs -= 1
+                else:
+                    st['team2'].append(last_player)
+                    team2_needs -= 1
 
         # Only proceed to map ban when all players have been picked
         if not st['waiting']:
@@ -923,39 +969,47 @@ async def start_picking_stage(channel, member_list):
     # Build list of party leaders and their members who are present
     for leader_id, party in party_data.items():
         leader = None
-        member = None
+        members = []
         for p in participants:
             p_id = str(getattr(p, 'id', p))
             if p_id == leader_id:
                 leader = p
             elif p_id in party['members']:
-                member = p
-        if leader and member:
+                members.append(p)
+        if leader and members:
             party_leader_list.append(leader)
-            party_member_assignments[str(getattr(leader, 'id', leader))] = member
+            party_member_assignments[str(getattr(leader, 'id', leader))] = members
 
-    # Select captains, ensuring party leaders get priority as captain1
+    # Select captains with improved party handling
+    captain1 = None
+    captain2 = None
+    
     if party_leader_list:
-        # First party leader becomes captain1 (CT side)
+        # Randomize party leaders to make it fair
+        random.shuffle(party_leader_list)
         captain1 = party_leader_list[0]
         
-        # For captain2, prefer another non-party participant
-        available_players = [p for p in participants 
+        # For captain2, prioritize other party leaders then regular players
+        other_leaders = [l for l in party_leader_list if l != captain1]
+        non_party_players = [p for p in participants 
                            if p != captain1 
-                           and str(getattr(p, 'id', p)) != str(getattr(party_member_assignments.get(str(getattr(captain1, 'id', captain1))), 'id', None))]
-        if available_players:
-            captain2 = random.choice(available_players)
+                           and not any(str(getattr(p, 'id', p)) == str(getattr(m, 'id', m)) 
+                                     for members in party_member_assignments.values() 
+                                     for m in members)]
+        
+        if other_leaders:
+            captain2 = random.choice(other_leaders)
+        elif non_party_players:
+            captain2 = random.choice(non_party_players)
         else:
-            captain2 = participants[1]
+            # Last resort: pick from remaining players
+            available = [p for p in participants if p != captain1]
+            captain2 = random.choice(available)
     else:
-        # No party leaders, fall back to random selection
-        if config.DEBUG_MODE and len(real_members) >= 2:
-            captain1 = real_members[0]
-            captain2 = real_members[1]
-        else:
-            available = list(non_party_members)  # Make a copy to avoid modifying original
-            random.shuffle(available)
-            captain1, captain2 = available[0], available[1]
+        # No party leaders, select from all participants
+        available = list(participants)
+        random.shuffle(available)
+        captain1, captain2 = available[0], available[1]
 
     # Create initial teams and waiting list
     team1 = [captain1]
