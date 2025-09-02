@@ -456,7 +456,7 @@ class DraftView(View):
             player_level = p.get('level', 1)
             
             # Format the stats string
-            stats_str = f"Avg: {avg_kills:.1f} | WR: {winrate:.1f}%"
+            stats_str = f"Elo: {p.get('elo', 1000)} | Avg: {avg_kills:.1f} | WR: {winrate:.1f}%"
             
             # Create select option with emoji as an actual emoji parameter
             opts.append(
