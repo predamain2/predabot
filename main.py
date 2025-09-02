@@ -474,15 +474,18 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
     async with st['lock']:
         uid = interaction.user.id
         current = st['pick_turn']
-
-        # normalize both IDs to strings for comparison
-        current_id = str(getattr(current, 'id', current))
-        user_id = str(uid)
-        if current_id != user_id:
+        
+        # Get the current captain's turn
+        is_ct_turn = str(key_of(current)) == str(key_of(st['captain_ct']))
+        current_captain = st['captain_ct'] if is_ct_turn else st['captain_t']
+        current_captain_id = str(getattr(current_captain, 'id', current_captain))
+        
+        # Check if it's the user's turn
+        if str(uid) != current_captain_id:
             await interaction.response.send_message("Not your turn.", ephemeral=True)
             return
 
-        # find picked object in waiting and verify they're not already in a team
+        # find picked object in waiting list
         picked = None
         for m in st['waiting']:
             if str(key_of(m)) == str(picked_key):
@@ -600,13 +603,21 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
                 )
                 return
                 
-            st['team1'].append(picked)
-            st['waiting'].remove(picked)
-            # Add party members if any
-            for member in party_members_to_pick:
-                if member not in st['team1'] and member not in st['team2']:
-                    st['team1'].append(member)
-                    st['waiting'].remove(member)
+            # Safely add to team1
+            try:
+                if picked in st['waiting']:
+                    st['waiting'].remove(picked)
+                st['team1'].append(picked)
+                
+                # Add party members if any
+                for member in party_members_to_pick:
+                    if member in st['waiting']:
+                        st['waiting'].remove(member)
+                    if member not in st['team1'] and member not in st['team2']:
+                        st['team1'].append(member)
+            except ValueError:
+                print(f"Warning: Could not remove player from waiting list")
+                
             st['pick_turn'] = st['captain_t']
         else:
             # Double check this player or their party members aren't in team1
@@ -617,13 +628,21 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
                 )
                 return
                 
-            st['team2'].append(picked)
-            st['waiting'].remove(picked)
-            # Add party members if any
-            for member in party_members_to_pick:
-                if member not in st['team1'] and member not in st['team2']:
-                    st['team2'].append(member)
-                    st['waiting'].remove(member)
+            # Safely add to team2
+            try:
+                if picked in st['waiting']:
+                    st['waiting'].remove(picked)
+                st['team2'].append(picked)
+                
+                # Add party members if any
+                for member in party_members_to_pick:
+                    if member in st['waiting']:
+                        st['waiting'].remove(member)
+                    if member not in st['team1'] and member not in st['team2']:
+                        st['team2'].append(member)
+            except ValueError:
+                print(f"Warning: Could not remove player from waiting list")
+                
             st['pick_turn'] = st['captain_ct']
 
         st['waiting'].remove(picked)
