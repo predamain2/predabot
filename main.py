@@ -896,28 +896,57 @@ async def start_picking_stage(channel, member_list):
     non_party_members = [p for p in participants if not any(p in party['members'] for leader_id, party in party_data.items())]
     random.shuffle(non_party_members)
     
-    # Select captains prioritizing party leaders
-    if len(party_leaders) >= 2:
-        # If we have 2 or more party leaders, select the first two as captains
-        captain1, captain2 = party_leaders[0], party_leaders[1]
-    elif len(party_leaders) == 1:
-        # If we have 1 party leader, they become captain1 and pick random captain2 from non-party members
-        captain1 = party_leaders[0]
-        non_leader_candidates = [p for p in non_party_members if p != captain1]
-        captain2 = random.choice(non_leader_candidates) if non_leader_candidates else participants[1]
+    # First, identify any party leaders among the participants and their members
+    party_leader_list = []
+    party_member_assignments = {}  # Maps leader -> member
+    
+    # Build list of party leaders and their members who are present
+    for leader_id, party in party_data.items():
+        leader = None
+        member = None
+        for p in participants:
+            p_id = str(getattr(p, 'id', p))
+            if p_id == leader_id:
+                leader = p
+            elif p_id in party['members']:
+                member = p
+        if leader and member:
+            party_leader_list.append(leader)
+            party_member_assignments[str(getattr(leader, 'id', leader))] = member
+
+    # Select captains, ensuring party leaders get priority as captain1
+    if party_leader_list:
+        # First party leader becomes captain1 (CT side)
+        captain1 = party_leader_list[0]
+        
+        # For captain2, prefer another non-party participant
+        available_players = [p for p in participants 
+                           if p != captain1 
+                           and str(getattr(p, 'id', p)) != str(getattr(party_member_assignments.get(str(getattr(captain1, 'id', captain1))), 'id', None))]
+        if available_players:
+            captain2 = random.choice(available_players)
+        else:
+            captain2 = participants[1]
     else:
-        # No party leaders, fall back to original logic
+        # No party leaders, fall back to random selection
         if config.DEBUG_MODE and len(real_members) >= 2:
             captain1 = real_members[0]
             captain2 = real_members[1]
         else:
-            captain1, captain2 = non_party_members[0], non_party_members[1]
+            available = list(non_party_members)  # Make a copy to avoid modifying original
+            random.shuffle(available)
+            captain1, captain2 = available[0], available[1]
 
     # Create initial teams and waiting list
     team1 = [captain1]
     team2 = [captain2]
     waiting = []
     assigned_members = set()  # Track all assigned players
+
+    # Automatically assign party member to captain1's team if captain1 is a party leader
+    captain1_id = str(getattr(captain1, 'id', captain1))
+    if captain1_id in party_member_assignments:
+        team1.append(party_member_assignments[captain1_id])
     
     chan_id = channel.id
     
