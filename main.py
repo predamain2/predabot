@@ -503,26 +503,58 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
         # First, check if picked player is a party leader or member
         picked_id = str(getattr(picked, 'id', picked))
         party_members_to_pick = []
-        
-        # If picked player is a party leader, get their party members
+        party_leader = None
+
+        # Check if picked player is a party leader
         if picked_id in party_data:
-            for member_id in party_data[picked_id]['members']:
-                if member_id != picked_id:  # Skip leader as they're already being picked
-                    for m in st['waiting']:
-                        if str(getattr(m, 'id', m)) == member_id:
-                            party_members_to_pick.append(m)
-                            break
+            party_leader = picked_id
         else:
             # Check if picked player is a party member
             for leader_id, party in party_data.items():
                 if picked_id in party['members']:
-                    # Add leader and other members if they're still in waiting
-                    for member_id in party['members']:
-                        if member_id != picked_id:  # Skip the picked player
-                            for m in st['waiting']:
-                                if str(getattr(m, 'id', m)) == member_id:
-                                    party_members_to_pick.append(m)
-                                    break
+                    party_leader = leader_id
+                    break
+
+        # If player is part of a party, ensure they're picked together
+        if party_leader:
+            # Check if party leader or member is already in a team
+            leader_in_team1 = any(str(getattr(p, 'id', p)) == party_leader for p in st['team1'])
+            leader_in_team2 = any(str(getattr(p, 'id', p)) == party_leader for p in st['team2'])
+
+            if leader_in_team1 or leader_in_team2:
+                target_team = 'team1' if leader_in_team1 else 'team2'
+                wrong_team = 'team2' if leader_in_team1 else 'team1'
+                current_team = 'team1' if str(key_of(current)) == str(key_of(st['captain_ct'])) else 'team2'
+
+                if current_team != target_team:
+                    await interaction.response.send_message(
+                        "Party members must be in the same team as their party leader.",
+                        ephemeral=True
+                    )
+                    return
+
+            # Get all party members
+            if picked_id != party_leader:  # If picking a member, must pick with leader
+                leader_in_waiting = False
+                for m in st['waiting']:
+                    if str(getattr(m, 'id', m)) == party_leader:
+                        leader_in_waiting = True
+                        party_members_to_pick.append(m)
+                        break
+                
+                if leader_in_waiting:
+                    await interaction.response.send_message(
+                        "You must pick the party leader first.",
+                        ephemeral=True
+                    )
+                    return
+            else:  # If picking leader, get all members
+                for member_id in party_data[party_leader]['members']:
+                    if member_id != party_leader:
+                        for m in st['waiting']:
+                            if str(getattr(m, 'id', m)) == member_id:
+                                party_members_to_pick.append(m)
+                                break
 
         # Check if adding the party would exceed team size
         team_size_limit = 5  # Standard team size
