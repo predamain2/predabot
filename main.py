@@ -598,11 +598,12 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
         # If only one player remains, auto-assign them to the correct team
         if len(st['waiting']) == 1:
             last_player = st['waiting'].pop(0)
-            # Assign to the team whose turn it is
-            if str(key_of(st['pick_turn'])) == str(key_of(st['captain_ct'])):
+            # Assign to the team that has less players, or team1 (CT) if equal
+            if len(st['team1']) <= len(st['team2']):
                 st['team1'].append(last_player)
             else:
                 st['team2'].append(last_player)
+            st['picks_made'] += 1
 
         # Only proceed to map ban when all players have been picked
         if not st['waiting']:
@@ -613,6 +614,12 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
                     if 'match_id' in st:
                         embed.add_field(name="Match ID", value=f"`{st['match_id']}`", inline=False)
                     await msg.edit(embed=embed, view=None, content=None)
+                    
+                    # Start map ban phase
+                    map_cog = bot.get_cog('MapBan')
+                    if map_cog:
+                        await map_cog.start_map_ban(chan, st['captain_ct'], st['captain_t'], st)
+                    return
                 except Exception:
                     pass
 
@@ -1481,7 +1488,8 @@ async def on_message(message: discord.Message):
                 ),
                 color=discord.Color.green()
             ),
-            view=None
+            view=None,
+            delete_after=10
         )
     except Exception as e:
         print(f"Failed to edit loading message: {e}")
