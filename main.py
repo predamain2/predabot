@@ -483,24 +483,22 @@ class DraftView(View):
         self.add_item(select)
 
 # ---------- Core pick handler (Select) ----------
+# ---------- Core pick handler (Select) ----------
 async def handle_pick_select(interaction: discord.Interaction, channel_id: int, picked_key: str):
     st = active_picks.get(channel_id)
     if not st:
         await interaction.response.send_message("Draft inactive.", ephemeral=True)
         return
 
-    # If pick session has been canceled externally, ignore
     async with st['lock']:
         uid = interaction.user.id
         current = st['pick_turn']
 
-        # normalize current id
         current_id = id_of(current) if not isinstance(current, int) else current
         if current_id != uid:
             await interaction.response.send_message("Not your turn.", ephemeral=True)
             return
 
-        # find picked object in waiting
         picked = None
         for m in st['waiting']:
             if str(key_of(m)) == str(picked_key):
@@ -511,7 +509,6 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
             await interaction.response.send_message("Player not available.", ephemeral=True)
             return
 
-        # Check if player is already in team1 or team2
         picked_id = str(getattr(picked, 'id', picked))
         for team_member in st['team1'] + st['team2']:
             if str(getattr(team_member, 'id', team_member)) == picked_id:
@@ -519,46 +516,29 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
                 return
 
         party_members_to_pick = []
-        
-        # If picked player is a party leader, get their party members
         if picked_id in party_data:
-            # Add party members that aren't already in teams
             for member_id in party_data[picked_id]['members']:
-                # Skip if member is already in a team
-                already_in_team = False
-                for team_member in st['team1'] + st['team2']:
-                    if str(getattr(team_member, 'id', team_member)) == member_id:
-                        already_in_team = True
-                        break
+                already_in_team = any(str(getattr(tm, 'id', tm)) == member_id for tm in st['team1'] + st['team2'])
                 if not already_in_team:
                     for m in st['waiting']:
                         if str(getattr(m, 'id', m)) == member_id:
                             party_members_to_pick.append(m)
                             break
         else:
-            # Check if picked player is a party member
             for leader_id, party in party_data.items():
                 if picked_id in party['members']:
-                    # Skip any members already in teams
                     for member_id in party['members']:
-                        if member_id == picked_id:  # Skip the picked player
+                        if member_id == picked_id:
                             continue
-                        # Check if member is already in a team
-                        already_in_team = False
-                        for team_member in st['team1'] + st['team2']:
-                            if str(getattr(team_member, 'id', team_member)) == member_id:
-                                already_in_team = True
-                                break
+                        already_in_team = any(str(getattr(tm, 'id', tm)) == member_id for tm in st['team1'] + st['team2'])
                         if not already_in_team:
                             for m in st['waiting']:
                                 if str(getattr(m, 'id', m)) == member_id:
                                     party_members_to_pick.append(m)
                                     break
 
-        # Check if adding the party would exceed team size
-        team_size_limit = 5  # Standard team size
+        team_size_limit = 5
         current_team = st['team1'] if str(key_of(current)) == str(key_of(st['captain_ct'])) else st['team2']
-        
         if len(current_team) + len(party_members_to_pick) + 1 > team_size_limit:
             await interaction.response.send_message(
                 "Cannot pick this player - their party would exceed team size limit.",
@@ -566,17 +546,14 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
             )
             return
 
-        # Assign to correct team and switch pick_turn to the other captain
         if str(key_of(current)) == str(key_of(st['captain_ct'])):
             st['team1'].append(picked)
-            # Add party members if any
             for member in party_members_to_pick:
                 st['team1'].append(member)
                 st['waiting'].remove(member)
             st['pick_turn'] = st['captain_t']
         else:
             st['team2'].append(picked)
-            # Add party members if any
             for member in party_members_to_pick:
                 st['team2'].append(member)
                 st['waiting'].remove(member)
@@ -585,7 +562,6 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
         st['waiting'].remove(picked)
         st['picks_made'] += 1 + len(party_members_to_pick)
 
-        # Update the same status message (if present)
         chan = bot.get_channel(channel_id)
         msg_id = lobby_status.get(channel_id, {}).get("message_id")
         msg = None
@@ -595,27 +571,38 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
             except Exception:
                 msg = None
 
-        # If only one player remains, auto-assign them to the correct team
+        # If only one player remains, auto-assign them
         if len(st['waiting']) == 1:
             last_player = st['waiting'].pop(0)
-            # Assign to the team that has less players, or team1 (CT) if equal
-            if len(st['team1']) <= len(st['team2']):
+            if len(st['team1']) < len(st['team2']):
                 st['team1'].append(last_player)
             else:
                 st['team2'].append(last_player)
             st['picks_made'] += 1
 
-        # Only proceed to map ban when all players have been picked
+            if not st['waiting']:
+                if msg:
+                    try:
+                        embed = discord.Embed(title="✅ Teams complete — proceeding to Map Ban", color=discord.Color.green())
+                        if 'match_id' in st:
+                            embed.add_field(name="Match ID", value=f"`{st['match_id']}`", inline=False)
+                        await msg.edit(embed=embed, view=None, content=None)
+
+                        map_cog = bot.get_cog('MapBan')
+                        if map_cog:
+                            await map_cog.start_map_ban(chan, st['captain_ct'], st['captain_t'], st)
+                        return
+                    except Exception:
+                        pass
+
         if not st['waiting']:
-            # edit status message to reflect moving to map ban
             if msg:
                 try:
                     embed = discord.Embed(title="✅ Teams complete — proceeding to Map Ban", color=discord.Color.green())
                     if 'match_id' in st:
                         embed.add_field(name="Match ID", value=f"`{st['match_id']}`", inline=False)
                     await msg.edit(embed=embed, view=None, content=None)
-                    
-                    # Start map ban phase
+
                     map_cog = bot.get_cog('MapBan')
                     if map_cog:
                         await map_cog.start_map_ban(chan, st['captain_ct'], st['captain_t'], st)
@@ -623,26 +610,6 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
                 except Exception:
                     pass
 
-            # announce teams & start map ban using MapBan cog; final full announcement will be done by MapBan when map chosen
-            # Store teams message in state for later deletion
-            st['teams_message'] = msg
-            
-            map_cog = bot.get_cog('MapBan')
-            if map_cog:
-                try:
-                    await map_cog.start_map_ban(chan, [st['captain_ct'], st['captain_t']], st['team1'], st['team2'], teams_message=msg)
-                except Exception as e:
-                    await chan.send("⚠️ Failed to start MapBan: " + str(e))
-            else:
-                await chan.send("⚠️ MapBan cog not loaded.")
-            # session finished here (map ban will finish with final message)
-            active_picks.pop(channel_id, None)
-            # update lobby_status state
-            lobby_status[channel_id] = {"message_id": msg_id, "state": "mapban"}
-            await interaction.response.defer()
-            return
-
-        # else update status message embed / view
         new_embed = build_roster_embed(st)
         new_view = DraftView(channel_id)
         if msg:
