@@ -155,24 +155,29 @@ def ensure_player(m):
         save_players()
     return player_data[k]
 
-def get_player_avg_kills(player_nick):
-    """Calculate average kills for a player from results.json"""
-    total_kills = 0
-    total_matches = 0
-    
-    for match in results_data.values():
-        # Check both CT and T teams
-        for team in ['ct_team', 't_team']:
-            if team in match:
-                for player in match[team]:
-                    if player['name'].lower() == player_nick.lower():
-                        total_kills += int(player.get('kills', 0))
-                        total_matches += 1
-                        break
-    
-    if total_matches == 0:
+def get_player_avg_kills(player_name: str) -> float:
+    """Calculate a player's average kills per match from results.json by name."""
+    if not RESULTS_FILE.exists():
         return 0.0
-    return round(total_kills / total_matches, 1)
+
+    try:
+        with RESULTS_FILE.open("r", encoding="utf-8") as f:
+            results = json.load(f)
+    except Exception:
+        return 0.0
+
+    total_kills = 0
+    matches_count = 0
+
+    for match in results.values():  # dict, not list
+        for team_key in ("winning_team", "losing_team"):
+            for p in match.get(team_key, []):
+                if p.get("name") == player_name:
+                    if "kills" in p:
+                        total_kills += int(p["kills"])
+                        matches_count += 1
+
+    return round(total_kills / matches_count, 1) if matches_count > 0 else 0.0
 
 def get_player_winrate(player_id):
     """Calculate winrate percentage for a player"""
