@@ -420,7 +420,7 @@ class DraftView(View):
         self.build_select()
 
     def build_select(self):
-        # clear previous
+        # clear previous items
         for c in list(self.children):
             self.remove_item(c)
 
@@ -428,25 +428,38 @@ class DraftView(View):
         if not st:
             return
 
+        # Build a fast lookup of IDs already on teams to avoid duplicates
+        team_ids = {str(getattr(m, "id", m)) for m in (st["team1"] + st["team2"])}
+
         opts = []
-        for m in st['waiting']:
-            # Get player data and calculate stats
-            p = player_data.get(key_of(m)) or ensure_player(m)
-            avg_kills = get_player_avg_kills(p['nick'])
-            winrate = get_player_winrate(key_of(m))
-            
-            # Get player level and emoji
-            player_level = p.get('level', 1)
-            level_emoji = f"<:level{player_level}:{config.LEVEL_EMOJIS.get(player_level, '')}>"
-            
-            # Format the label with level emoji and stats
-            stats_str = f"Avg: {avg_kills:.1f} | WR: {winrate:.1f}%"
-            
+        for m in st["waiting"]:
+            mid = str(getattr(m, "id", m))
+            if mid in team_ids:
+                continue  # never show someone who is already in a team
+
+            # If this member is in a party AND their leader is already on any team, hide them
+            hide_due_to_party = False
+            for leader_id, party in party_data.items():
+                if mid in party.get("members", []):
+                    if leader_id in team_ids:
+                        hide_due_to_party = True
+                        break
+            if hide_due_to_party:
+                continue
+
+            pdata = player_data.get(str(mid)) or ensure_player(m)
+            avg_kills = get_player_avg_kills(pdata["nick"])
+            winrate = get_player_winrate(mid)
+            lvl = int(pdata.get("level", 1))
             opts.append(
                 discord.SelectOption(
-                    label=f"{level_emoji} {p['nick']}",
-                    description=stats_str,
-                    value=str(key_of(m))
+                    label=pdata["nick"],
+                    description=f"Elo: {pdata.get('elo', 1000)} | Avg: {avg_kills:.1f} | WR: {winrate:.1f}%",
+                    value=mid,
+                    emoji=discord.PartialEmoji(
+                        name=f"level{lvl}",
+                        id=int(config.LEVEL_EMOJIS.get(lvl, 0) or 0)
+                    )
                 )
             )
 
@@ -461,90 +474,92 @@ class DraftView(View):
         select.callback = on_select
         self.add_item(select)
 
-# ---------- Core pick handler (Select) ----------
-async def handle_pick_select(interaction: discord.Interaction, channel_id: int, picked_key: str):
+
+async def handle_pick_select(interaction: discord.Interaction, channel_id: int, selected_id: str):
     st = active_picks.get(channel_id)
     if not st:
-        await interaction.response.send_message("Draft inactive.", ephemeral=True)
+        await interaction.response.send_message("Draft isn't active here.", ephemeral=True)
         return
 
-    # If pick session has been canceled externally, ignore
-    async with st['lock']:
-        uid = interaction.user.id
-        current = st['pick_turn']
-
-        # normalize current id
-        current_id = id_of(current) if not isinstance(current, int) else current
-        if current_id != uid:
-            await interaction.response.send_message("Not your turn.", ephemeral=True)
+    # Lock per-lobby to avoid concurrency races
+    async with st["lock"]:
+        # Identify current picker (captain_ct or captain_t)
+        current_picker = st.get("pick_turn")
+        if not current_picker:
+            await interaction.response.send_message("No picker is set.", ephemeral=True)
             return
 
-        # find picked object in waiting
+        if str(getattr(interaction.user, "id", interaction.user)) != str(getattr(current_picker, "id", current_picker)):
+            await interaction.response.send_message("It's not your turn to pick.", ephemeral=True)
+            return
+
+        # Find the selected member object in waiting
         picked = None
-        for m in st['waiting']:
-            if str(key_of(m)) == str(picked_key):
+        for m in list(st["waiting"]):
+            if str(getattr(m, "id", m)) == str(selected_id):
                 picked = m
                 break
-
         if not picked:
-            await interaction.response.send_message("Player not available.", ephemeral=True)
+            await interaction.response.send_message("That player is no longer available.", ephemeral=True)
             return
 
-        # First, check if picked player is a party leader or member
-        picked_id = str(getattr(picked, 'id', picked))
-        party_members_to_pick = []
-        
-        # If picked player is a party leader, get their party members
-        if picked_id in party_data:
-            for member_id in party_data[picked_id]['members']:
-                if member_id != picked_id:  # Skip leader as they're already being picked
-                    for m in st['waiting']:
-                        if str(getattr(m, 'id', m)) == member_id:
-                            party_members_to_pick.append(m)
-                            break
-        else:
-            # Check if picked player is a party member
-            for leader_id, party in party_data.items():
-                if picked_id in party['members']:
-                    # Add leader and other members if they're still in waiting
-                    for member_id in party['members']:
-                        if member_id != picked_id:  # Skip the picked player
-                            for m in st['waiting']:
-                                if str(getattr(m, 'id', m)) == member_id:
-                                    party_members_to_pick.append(m)
-                                    break
+        # Determine which team is picking now
+        ct_turn = (str(getattr(current_picker, "id", current_picker)) 
+                   == str(getattr(st["captain_ct"], "id", st["captain_ct"])))
+        picking_team = st["team1"] if ct_turn else st["team2"]
+        other_team   = st["team2"] if ct_turn else st["team1"]
 
-        # Check if adding the party would exceed team size
-        team_size_limit = 5  # Standard team size
-        current_team = st['team1'] if str(key_of(current)) == str(key_of(st['captain_ct'])) else st['team2']
-        
-        if len(current_team) + len(party_members_to_pick) + 1 > team_size_limit:
+        # Collect party member(s) of the picked player that must follow (max 1 member per your system)
+        party_followers = []
+        picked_id = str(getattr(picked, "id", picked))
+        for leader_id, party in party_data.items():
+            members = party.get("members", [])
+            if picked_id in members:
+                # Add the other member if present, not already on any team, and still in waiting
+                for member_id in members:
+                    if member_id == picked_id:
+                        continue
+                    # skip if already on a team
+                    already_on_team = any(
+                        str(getattr(tm, "id", tm)) == member_id for tm in (st["team1"] + st["team2"])
+                    )
+                    if already_on_team:
+                        continue
+                    # find in waiting
+                    for m in st["waiting"]:
+                        if str(getattr(m, "id", m)) == member_id:
+                            party_followers.append(m)
+                            break
+                break  # only one party applies
+
+        # Enforce team size (5v5)
+        if len(picking_team) + 1 + len(party_followers) > 5:
             await interaction.response.send_message(
-                "Cannot pick this player - their party would exceed team size limit.",
+                "Cannot pick this player—their party would exceed the 5-player limit.",
                 ephemeral=True
             )
             return
 
-        # Assign to correct team and switch pick_turn to the other captain
-        if str(key_of(current)) == str(key_of(st['captain_ct'])):
-            st['team1'].append(picked)
-            # Add party members if any
-            for member in party_members_to_pick:
-                st['team1'].append(member)
-                st['waiting'].remove(member)
-            st['pick_turn'] = st['captain_t']
-        else:
-            st['team2'].append(picked)
-            # Add party members if any
-            for member in party_members_to_pick:
-                st['team2'].append(member)
-                st['waiting'].remove(member)
-            st['pick_turn'] = st['captain_ct']
+        # Assign picked + their party follower(s)
+        picking_team.append(picked)
+        st["waiting"].remove(picked)
+        for m in party_followers:
+            picking_team.append(m)
+            st["waiting"].remove(m)
 
-        st['waiting'].remove(picked)
-        st['picks_made'] += 1 + len(party_members_to_pick)
+        # Switch turn **after** the pick:
+        # If only one side had a party added at start, we already balanced first turn in start_picking_stage.
+        st["pick_turn"] = st["captain_t"] if ct_turn else st["captain_ct"]
 
-        # Update the same status message (if present)
+        # Auto-assign the very last remaining player (if any) to the team with fewer players
+        if len(st["waiting"]) == 1:
+            last_player = st["waiting"].pop(0)
+            if len(st["team1"]) <= len(st["team2"]):
+                st["team1"].append(last_player)
+            else:
+                st["team2"].append(last_player)
+
+        # If everyone has been assigned, proceed to Map Ban
         chan = bot.get_channel(channel_id)
         msg_id = lobby_status.get(channel_id, {}).get("message_id")
         msg = None
@@ -554,47 +569,40 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
             except Exception:
                 msg = None
 
-        # If only one player remains, auto-assign them to the correct team
-        if len(st['waiting']) == 1:
-            last_player = st['waiting'].pop(0)
-            # Assign to the team whose turn it is
-            if str(key_of(st['pick_turn'])) == str(key_of(st['captain_ct'])):
-                st['team1'].append(last_player)
-            else:
-                st['team2'].append(last_player)
-
-        # Only proceed to map ban when all players have been picked
-        if not st['waiting']:
-            # edit status message to reflect moving to map ban
+        if not st["waiting"]:
+            # mark UI
             if msg:
                 try:
                     embed = discord.Embed(title="✅ Teams complete — proceeding to Map Ban", color=discord.Color.green())
-                    if 'match_id' in st:
+                    if "match_id" in st:
                         embed.add_field(name="Match ID", value=f"`{st['match_id']}`", inline=False)
                     await msg.edit(embed=embed, view=None, content=None)
                 except Exception:
                     pass
 
-            # announce teams & start map ban using MapBan cog; final full announcement will be done by MapBan when map chosen
-            # Store teams message in state for later deletion
-            st['teams_message'] = msg
-            
-            map_cog = bot.get_cog('MapBan')
+            # Start map ban via the MapBan cog (uses your existing signature)
+            map_cog = bot.get_cog("MapBan")
             if map_cog:
                 try:
-                    await map_cog.start_map_ban(chan, [st['captain_ct'], st['captain_t']], st['team1'], st['team2'], teams_message=msg)
+                    await map_cog.start_map_ban(
+                        chan,
+                        [st["captain_ct"], st["captain_t"]],
+                        st["team1"],
+                        st["team2"],
+                        teams_message=msg
+                    )
                 except Exception as e:
                     await chan.send("⚠️ Failed to start MapBan: " + str(e))
             else:
                 await chan.send("⚠️ MapBan cog not loaded.")
-            # session finished here (map ban will finish with final message)
+
+            # cleanup
             active_picks.pop(channel_id, None)
-            # update lobby_status state
             lobby_status[channel_id] = {"message_id": msg_id, "state": "mapban"}
             await interaction.response.defer()
             return
 
-        # else update status message embed / view
+        # Otherwise, refresh the roster message and keep drafting
         new_embed = build_roster_embed(st)
         new_view = DraftView(channel_id)
         if msg:
@@ -604,7 +612,7 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
                 await chan.send(embed=new_embed, view=new_view)
         else:
             newmsg = await chan.send(embed=new_embed, view=new_view)
-            st['message_id'] = newmsg.id
+            st["message_id"] = newmsg.id
             lobby_status[channel_id] = {"message_id": newmsg.id, "state": "picking"}
 
         await interaction.response.defer()
@@ -766,41 +774,22 @@ async def announce_teams_final(channel: discord.TextChannel, match_id, chosen_ma
     return msg
 
 # ---------- Start picking stage ----------
-async def start_picking_stage(channel, member_list):
+async def start_picking_stage(channel: discord.TextChannel, member_list):
     participants = []
     real_members = []
-    party_leaders = []
-    party_members = {}  # leader_id -> [member_ids]
-    
-    # First, identify party leaders and their members
-    for leader_id, party in party_data.items():
-        leader_member = None
-        for m in member_list:
-            if str(getattr(m, 'id', m)) == leader_id:
-                leader_member = m
-                break
-        if leader_member:
-            party_leaders.append(leader_member)
-            party_members[leader_id] = []
-            for member_id in party['members']:
-                if member_id != leader_id:  # Skip leader as they're already handled
-                    for m in member_list:
-                        if str(getattr(m, 'id', m)) == member_id:
-                            party_members[leader_id].append(m)
-                            break
 
-    # Add all members to participants list
+    # Build participant lists and ensure we have player_data
     for m in member_list:
-        if getattr(m, 'bot', False):
+        if getattr(m, "bot", False):
             continue
         participants.append(m)
         real_members.append(m)
         ensure_player(m)
 
+    # Fill with fakes if needed (keeps your debug behavior)
     target = 10
     if config.DEBUG_MODE:
         target = config.DEBUG_PLAYERS if config.DEBUG_PLAYERS else 2
-
     idx = 0
     while len(participants) < target:
         fake = FakeMember(idx)
@@ -808,109 +797,94 @@ async def start_picking_stage(channel, member_list):
         ensure_player(fake)
         idx += 1
 
-    # Shuffle non-party members
-    non_party_members = [p for p in participants if not any(p in party['members'] for leader_id, party in party_data.items())]
-    random.shuffle(non_party_members)
-    
-    # Select captains prioritizing party leaders
-    if len(party_leaders) >= 2:
-        # If we have 2 or more party leaders, select the first two as captains
-        captain1, captain2 = party_leaders[0], party_leaders[1]
-    elif len(party_leaders) == 1:
-        # If we have 1 party leader, they become captain1 and pick random captain2 from non-party members
-        captain1 = party_leaders[0]
-        non_leader_candidates = [p for p in non_party_members if p != captain1]
-        captain2 = random.choice(non_leader_candidates) if non_leader_candidates else participants[1]
-    else:
-        # No party leaders, fall back to original logic
-        if config.DEBUG_MODE and len(real_members) >= 2:
-            captain1 = real_members[0]
-            captain2 = real_members[1]
-        else:
-            captain1, captain2 = non_party_members[0], non_party_members[1]
+    # Helpers
+    def mid(x): return str(getattr(x, "id", x))
 
-    # Create initial teams and waiting list
-    team1 = [captain1]
-    team2 = [captain2]
+    # Index membership -> leader and party lists
+    leader_ids = set(party_data.keys())
+    member_to_party_leader = {}
+    party_member_ids = set()
+    for leader_id, party in party_data.items():
+        for m_id in party.get("members", []):
+            member_to_party_leader[m_id] = leader_id
+            party_member_ids.add(m_id)
+
+    # Figure out which leaders are present in this lobby
+    present_leaders = []
+    for p in participants:
+        if mid(p) in leader_ids:
+            present_leaders.append(p)
+
+    # Choose captains according to your rules
+    if len(present_leaders) >= 2:
+        captain1 = present_leaders[0]  # CT
+        captain2 = present_leaders[1]  # T
+    elif len(present_leaders) == 1:
+        captain1 = present_leaders[0]  # CT is the party leader
+        # pick an independent as the other captain
+        independents = [p for p in participants if mid(p) not in party_member_ids and mid(p) != mid(captain1)]
+        random.shuffle(independents)
+        captain2 = independents[0] if independents else next(p for p in participants if mid(p) != mid(captain1))
+    else:
+        # no leaders present, fall back to first two non-party participants
+        non_party = [p for p in participants if mid(p) not in party_member_ids]
+        if len(non_party) < 2:
+            non_party = participants[:]
+        captain1, captain2 = non_party[0], non_party[1]
+
+    team1 = [captain1]  # CT
+    team2 = [captain2]  # T
     waiting = []
-    
-    # First, auto-assign party member of captain1 to team1
-    if str(getattr(captain1, 'id', captain1)) in party_members:
-        party_member = party_members[str(getattr(captain1, 'id', captain1))][0]  # Only one member in party
-        team1.append(party_member)
-        
-    # Then auto-assign party member of captain2 to team2
-    if str(getattr(captain2, 'id', captain2)) in party_members:
-        party_member = party_members[str(getattr(captain2, 'id', captain2))][0]  # Only one member in party
-        team2.append(party_member)
-        
-    # Add remaining party members to waiting list (party leaders who aren't captains + their members)
-    for leader_id, members in party_members.items():
-        if leader_id not in [str(getattr(captain1, 'id', captain1)), str(getattr(captain2, 'id', captain2))]:
-            waiting.extend(members)  # Add the one member to waiting list
-            
-    # Finally add remaining non-party members
-    remaining_members = [p for p in participants if p not in (captain1, captain2) and p not in waiting]
-    waiting.extend(remaining_members)
+
+    # Auto-assign each captain's single party member (if present & in the lobby)
+    def auto_assign_party_member(captain, team):
+        cap_id = mid(captain)
+        if cap_id in party_data:
+            # find the 1 member that is not the leader
+            for member_id in party_data[cap_id].get("members", []):
+                if member_id != cap_id:
+                    # is this member here?
+                    for m in participants:
+                        if mid(m) == member_id:
+                            # avoid dupes
+                            if all(mid(x) != member_id for x in (team1 + team2)):
+                                team.append(m)
+                            return
+
+    auto_assign_party_member(captain1, team1)
+    auto_assign_party_member(captain2, team2)
+
+    # Put everyone else into waiting (who is not already in team1 or team2)
+    already = {mid(x) for x in (team1 + team2)}
+    for p in participants:
+        if mid(p) not in already:
+            waiting.append(p)
+
+    # Decide first pick:
+    # - If one side has 2 (leader+member) vs the other has 1 -> the smaller team picks first.
+    # - If both have 2 (two parties) or both have 1 -> CT picks first.
+    if len(team1) < len(team2):
+        first_pick = captain1
+    elif len(team2) < len(team1):
+        first_pick = captain2
+    else:
+        first_pick = captain1
 
     chan_id = channel.id
-    
-    # Add remaining non-party members to waiting list
-    remaining_members = [p for p in participants 
-                        if p not in team1 
-                        and p not in team2 
-                        and p not in waiting]
-    waiting.extend(remaining_members)
-    
-    # Double check if any party members were missed
-    if str(getattr(captain1, 'id', captain1)) in party_members:
-        party_members_list = party_members[str(getattr(captain1, 'id', captain1))]
-        # Only add up to 4 more players (5 total including captain)
-        members_to_add = min(len(party_members_list), 4)
-        team1.extend(party_members_list[:members_to_add])
-        # Remove assigned members from waiting list
-        for member in party_members_list[:members_to_add]:
-            if member in waiting:
-                waiting.remove(member)
-        # Add any remaining members to waiting list
-        for member in party_members_list[members_to_add:]:
-            if member not in waiting:
-                waiting.append(member)
-    
-    # Since parties are limited to 2 players and we already assigned party members 
-    # of captains, we just need to ensure no duplicates in waiting list
-    waiting = list(set(waiting))
-    
-    # Double check team sizes (should never be needed now since parties are max 2 players)
-    while len(team1) > 5:
-        extra = team1.pop()
-        if extra not in waiting:
-            waiting.append(extra)
-    while len(team2) > 5:
-        waiting.append(team2.pop())
-
-    # Determine first pick based on team sizes and CT priority
-    if len(team1) == len(team2):
-        # If teams are equal size (both have 2 from parties or both have 1), CT (team1) gets first pick
-        first_pick = captain1
-    else:
-        # Otherwise, team with fewer players gets first pick
-        first_pick = captain1 if len(team1) < len(team2) else captain2
-    
     st = {
-        'team1': team1,
-        'team2': team2,
-        'waiting': waiting,
-        'captain_ct': captain1,
-        'captain_t': captain2,
-        'pick_turn': first_pick,  # Assigned based on team sizes and CT priority
-        'picks_made': 0,
-        'lock': asyncio.Lock(),
-        'message_id': None
+        "team1": team1,
+        "team2": team2,
+        "waiting": waiting,
+        "captain_ct": captain1,
+        "captain_t": captain2,
+        "pick_turn": first_pick,
+        "picks_made": 0,
+        "lock": asyncio.Lock(),
+        "message_id": None,
     }
     active_picks[chan_id] = st
 
-    # Edit or create the single status message for this lobby
+    # Create / update the single status message for this lobby
     status = lobby_status.get(chan_id, {})
     msg = None
     if status.get("message_id"):
@@ -923,18 +897,16 @@ async def start_picking_stage(channel, member_list):
     view = DraftView(chan_id)
     if msg:
         try:
-            await msg.edit(embed=embed, view=view, content=None)
+            await msg.edit(embed=embed, view=view)
         except Exception:
-            new_msg = await channel.send(embed=embed, view=view)
-            st['message_id'] = new_msg.id
-            lobby_status[chan_id] = {"message_id": new_msg.id, "state": "picking"}
-            return
-        st['message_id'] = msg.id
-        lobby_status[chan_id] = {"message_id": msg.id, "state": "picking"}
+            newmsg = await channel.send(embed=embed, view=view)
+            st["message_id"] = newmsg.id
+            lobby_status[chan_id] = {"message_id": newmsg.id, "state": "picking"}
     else:
-        new_msg = await channel.send(embed=embed, view=view)
-        st['message_id'] = new_msg.id
-        lobby_status[chan_id] = {"message_id": new_msg.id, "state": "picking"}
+        newmsg = await channel.send(embed=embed, view=view)
+        st["message_id"] = newmsg.id
+        lobby_status[chan_id] = {"message_id": newmsg.id, "state": "picking"}
+
 
 # ---------- Cancel session helper ----------
 async def cancel_session_and_reset(channel_id, reason="A player left. Lobby reset.", leaver_id=None):
