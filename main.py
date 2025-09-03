@@ -785,28 +785,22 @@ async def start_picking_stage(channel, member_list):
     participants = []
     real_members = []
     party_leaders = []
-    processed_members = set()  # Track all processed members to prevent duplicates
-    
-    # First, identify party leaders and their members
+    processed_members = set()
+
     for leader_id, party in party_data.items():
-        # Find leader in member list
         leader_member = None
         for m in member_list:
             if str(getattr(m, 'id', m)) == leader_id:
                 leader_member = m
                 break
-                
         if leader_member and leader_id not in processed_members:
             party_leaders.append(leader_member)
             processed_members.add(leader_id)
-            # Process party members if they exist
             if party['members']:
-                # Add each member only if not already processed
                 for member_id in party['members']:
                     if member_id != leader_id and member_id not in processed_members:
                         processed_members.add(member_id)
 
-    # Add all members to participants list
     for m in member_list:
         if getattr(m, 'bot', False):
             continue
@@ -825,113 +819,86 @@ async def start_picking_stage(channel, member_list):
         ensure_player(fake)
         idx += 1
 
-    # Create sets of member IDs for easy lookup
     party_member_ids = set()
     for party in party_data.values():
         party_member_ids.update(party['members'])
-    
-    # Identify truly independent players (not in any party)
+
     independent_players = [p for p in participants if str(getattr(p, 'id', p)) not in party_member_ids]
     random.shuffle(independent_players)
-    
-    # Select captains
+
     captain1 = None
     captain2 = None
-    
+
     if len(party_leaders) >= 2:
-        # If multiple party leaders, pick the first two
         captain1, captain2 = party_leaders[0], party_leaders[1]
     elif len(party_leaders) == 1:
-        # One party leader becomes captain1
         captain1 = party_leaders[0]
-        # Pick captain2 from independent players
         available_players = [p for p in independent_players if p != captain1]
         if available_players:
             captain2 = random.choice(available_players)
         else:
-            # If no independent players, pick from non-leader participants
             available_players = [p for p in participants if p != captain1]
             captain2 = random.choice(available_players)
     else:
-        # No party leaders, pick from independent players
         if len(independent_players) >= 2:
             captain1, captain2 = independent_players[0], independent_players[1]
         else:
-            # Not enough independent players, use any participants
             captain1, captain2 = participants[0], participants[1]
 
-    # Initialize teams with captains
     team1 = [captain1]
     team2 = [captain2]
     assigned_ids = {str(getattr(captain1, 'id', captain1)), str(getattr(captain2, 'id', captain2))}
-    auto_assigned_members = []  # Track members that were auto-assigned
+    auto_assigned_members = []
     waiting = []
-    
+
     def assign_party_member(captain_id, team):
-        """Helper function to assign a single party member to a team"""
         if captain_id in party_data:
             party = party_data[captain_id]
-            # Look for unassigned party member
             for member_id in party['members']:
                 if member_id != captain_id and member_id not in assigned_ids:
-                    # Find the actual member object
                     for m in participants:
                         if str(getattr(m, 'id', m)) == member_id:
                             team.append(m)
                             assigned_ids.add(member_id)
-                            # Return the member we added so we can exclude them from waiting list
                             return m
         return None
-    
-    # Assign party members to teams and track who was auto-assigned
+
     auto_member1 = assign_party_member(str(getattr(captain1, 'id', captain1)), team1)
     if auto_member1:
         auto_assigned_members.append(auto_member1)
-    
+
     auto_member2 = assign_party_member(str(getattr(captain2, 'id', captain2)), team2)
     if auto_member2:
         auto_assigned_members.append(auto_member2)
-        
-    # Add unassigned participants to waiting list
+
     for p in participants:
         if str(getattr(p, 'id', p)) not in assigned_ids:
             waiting.append(p)
-            
-    # Finally add remaining non-party members
+
     remaining_members = [p for p in participants if p not in (captain1, captain2) and p not in waiting]
     waiting.extend(remaining_members)
 
     chan_id = channel.id
-    
-    # Add only available players to waiting list
+
     for p in participants:
-        # Skip if player is:
-        # 1. In team1
-        # 2. In team2
-        # 3. Was auto-assigned as a party member
-        # 4. Already assigned (using assigned_ids)
         if (p not in team1 and 
             p not in team2 and 
             p not in auto_assigned_members and
             str(getattr(p, 'id', p)) not in assigned_ids):
             waiting.append(p)
-    
-    # Double check team sizes (shouldn't be needed anymore)
+
     while len(team1) > 5:
         extra = team1.pop()
         if extra not in waiting and extra not in auto_assigned_members:
             waiting.append(extra)
-            
+
     while len(team2) > 5:
         extra = team2.pop()
         if extra not in waiting and extra not in auto_assigned_members:
             waiting.append(extra)
-    
-    # Since parties are limited to 2 players and we already assigned party members 
-    # of captains, we just need to ensure no duplicates in waiting list
+
     waiting = list(set(waiting))
-    
-    # Double check team sizes (should never be needed now since parties are max 2 players)
+
     while len(team1) > 5:
         extra = team1.pop()
         if extra not in waiting:
@@ -939,28 +906,41 @@ async def start_picking_stage(channel, member_list):
     while len(team2) > 5:
         waiting.append(team2.pop())
 
-    # Determine first pick based on team sizes and CT priority
     if len(team1) == len(team2):
-        # If teams are equal size (both have 2 from parties or both have 1), CT (team1) gets first pick
         first_pick = captain1
     else:
-        # Otherwise, team with fewer players gets first pick
         first_pick = captain1 if len(team1) < len(team2) else captain2
-    
+
     st = {
         'team1': team1,
         'team2': team2,
         'waiting': waiting,
         'captain_ct': captain1,
         'captain_t': captain2,
-        'pick_turn': first_pick,  # Assigned based on team sizes and CT priority
+        'pick_turn': first_pick,
         'picks_made': 0,
         'lock': asyncio.Lock(),
         'message_id': None
     }
     active_picks[chan_id] = st
 
-    # Edit or create the single status message for this lobby
+    # ✅ If no players left to pick, skip draft and go directly to map ban
+    if not st['waiting']:
+        embed = discord.Embed(
+            title="✅ Teams complete — proceeding to Map Ban",
+            color=discord.Color.green()
+        )
+        if 'match_id' in st:
+            embed.add_field(name="Match ID", value=f"`{st['match_id']}`", inline=False)
+        msg = await channel.send(embed=embed)
+
+        map_cog = bot.get_cog('MapBan')
+        if map_cog:
+            await map_cog.start_map_ban(channel, st['captain_ct'], st['captain_t'], st)
+        lobby_status[chan_id] = {"message_id": msg.id, "state": "mapban"}
+        active_picks.pop(chan_id, None)
+        return
+
     status = lobby_status.get(chan_id, {})
     msg = None
     if status.get("message_id"):
