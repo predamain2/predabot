@@ -1607,6 +1607,85 @@ async def on_voice_state_update(member, before, after):
     left_lobby = before.channel and before.channel.id == config.LOBBY_VOICE_CHANNEL_ID and (not after.channel or after.channel.id != config.LOBBY_VOICE_CHANNEL_ID)
     moved_into_lobby = after.channel and after.channel.id == config.LOBBY_VOICE_CHANNEL_ID and (not before.channel or before.channel.id != config.LOBBY_VOICE_CHANNEL_ID)
 
+    async def build_and_apply_waiting_embed(text_channel: discord.TextChannel, lobby_vc: discord.VoiceChannel):
+        """Create or update the lobby waiting embed with richer context and branding.
+
+        - Shows player count and required players
+        - Lists current player mentions (up to 10)
+        - Adds brief instructions
+        - Uses a thumbnail logo if `af_logo.png` is present in the project folder
+        """
+        # Count non-bot members
+        members = [m for m in lobby_vc.members if not getattr(m, 'bot', False)]
+        count = len(members)
+        required = 10
+        if config.DEBUG_MODE:
+            required = config.DEBUG_PLAYERS if config.DEBUG_PLAYERS else 2
+
+        # Prepare a prettier embed
+        description = (
+            f"Waiting for players: **{count}/{required}**\n\n"
+            "- Join the lobby voice channel to be counted.\n"
+            "- The match will start automatically when full.\n"
+            "- Be respectful and ready to play."
+        )
+        embed = discord.Embed(
+            title="ARENA FACEIT — Lobby",
+            description=description,
+            color=discord.Color.from_rgb(220, 20, 60)
+        )
+
+        # List current players (up to 10)
+        if members:
+            player_list = "\n".join(m.mention for m in members[:10])
+            extra = len(members) - 10
+            if extra > 0:
+                player_list += f"\n…and {extra} more"
+            embed.add_field(name="Current players", value=player_list, inline=False)
+        else:
+            embed.add_field(name="Current players", value="No players yet — be the first!", inline=False)
+
+        embed.set_footer(text="Standoff 2 FACEIT · Fair play. Good vibes.")
+
+        # Try to add a thumbnail logo if present
+        logo_filename = "af_logo.png"
+        file_obj = None
+        try:
+            with open(logo_filename, "rb") as f:
+                file_obj = discord.File(f, filename=logo_filename)
+            embed.set_thumbnail(url=f"attachment://{logo_filename}")
+        except Exception:
+            # Fallback to existing image.png if available
+            try:
+                with open("image.png", "rb") as f:
+                    file_obj = discord.File(f, filename="image.png")
+                embed.set_thumbnail(url="attachment://image.png")
+            except Exception:
+                pass
+
+        # get or create a status message for this text channel
+        status = lobby_status.get(text_channel.id, {})
+        msg = None
+        if status.get("message_id"):
+            try:
+                msg = await text_channel.fetch_message(status["message_id"])
+            except Exception:
+                msg = None
+
+        if not msg:
+            if file_obj is not None:
+                new_msg = await text_channel.send(embed=embed, file=file_obj)
+            else:
+                new_msg = await text_channel.send(embed=embed)
+            lobby_status[text_channel.id] = {"message_id": new_msg.id, "state": "waiting"}
+        else:
+            try:
+                # When editing, the original attachment remains, so we only edit the embed
+                await msg.edit(embed=embed, view=None)
+                lobby_status[text_channel.id]["state"] = "waiting"
+            except Exception:
+                pass
+
     # If someone left the lobby and there's an active session, reset
     if left_lobby:
         text_ch = guild.get_channel(config.LOBBY_TEXT_CHANNEL_ID)
@@ -1625,6 +1704,13 @@ async def on_voice_state_update(member, before, after):
                     except:
                         pass
                     return
+            # If no active session, update the waiting embed to reflect the new count
+            try:
+                lobby_vc = guild.get_channel(config.LOBBY_VOICE_CHANNEL_ID)
+                if lobby_vc:
+                    await build_and_apply_waiting_embed(text_ch, lobby_vc)
+            except Exception:
+                pass
 
     # When someone joins, check if they're timed out first
     if moved_into_lobby:
@@ -1670,34 +1756,12 @@ async def on_voice_state_update(member, before, after):
         text_ch = guild.get_channel(config.LOBBY_TEXT_CHANNEL_ID)
         if not text_ch:
             return
-        count = len([m for m in lobby.members if not getattr(m,'bot',False)])
-        required = 10
-        if config.DEBUG_MODE:
-            required = config.DEBUG_PLAYERS if config.DEBUG_PLAYERS else 2
-
-        # get or create a status message for this text channel
-        status = lobby_status.get(text_ch.id, {})
-        msg = None
-        if status.get("message_id"):
-            try:
-                msg = await text_ch.fetch_message(status["message_id"])
-            except Exception:
-                msg = None
-
-        if not msg:
-            embed = discord.Embed(title="🎙 Lobby", description=f"Waiting players: {count}/{required}", color=discord.Color.blue())
-            new_msg = await text_ch.send(embed=embed)
-            lobby_status[text_ch.id] = {"message_id": new_msg.id, "state": "waiting"}
-        else:
-            try:
-                embed = discord.Embed(title="🎙 Lobby", description=f"Waiting players: {count}/{required}", color=discord.Color.blue())
-                await msg.edit(embed=embed, view=None)
-                lobby_status[text_ch.id]["state"] = "waiting"
-            except Exception:
-                pass
+        await build_and_apply_waiting_embed(text_ch, lobby)
 
         # start if enough players present
-        if count >= required:
+        members_now = [m for m in lobby.members if not getattr(m, 'bot', False)]
+        needed = config.DEBUG_PLAYERS if config.DEBUG_MODE and config.DEBUG_PLAYERS else 10
+        if len(members_now) >= needed:
             # edit status message to show starting picking
             status_msg_id = lobby_status[text_ch.id]["message_id"]
             try:
