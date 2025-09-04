@@ -423,6 +423,8 @@ class DraftView(View):
         super().__init__(timeout=None)
         self.channel_id = channel_id
         self.build_select()
+        # Add ReHost vote button
+        self.add_item(self.RehostButton(self.channel_id))
 
     def build_select(self):
         # clear previous items
@@ -478,6 +480,66 @@ class DraftView(View):
 
         select.callback = on_select
         self.add_item(select)
+
+    class RehostButton(discord.ui.Button):
+        def __init__(self, channel_id: int):
+            super().__init__(label="ReHost", style=discord.ButtonStyle.danger)
+            self.channel_id = channel_id
+
+        async def callback(self, interaction: discord.Interaction):
+            st = active_picks.get(self.channel_id)
+            if not st:
+                await interaction.response.send_message("No active draft.", ephemeral=True, delete_after=5)
+                return
+            # Ensure vote store
+            if "rehost_votes" not in st:
+                st["rehost_votes"] = set()
+            voter_id = str(interaction.user.id)
+            # Prevent double voting
+            if voter_id in st["rehost_votes"]:
+                await interaction.response.send_message("You already voted to rehost.", ephemeral=True, delete_after=5)
+                return
+
+            # Must be in lobby voice channel
+            vc = interaction.guild.get_channel(config.LOBBY_VOICE_CHANNEL_ID)
+            if not vc or interaction.user not in vc.members:
+                await interaction.response.send_message("Join the lobby voice to vote.", ephemeral=True, delete_after=5)
+                return
+
+            # Record vote
+            st["rehost_votes"].add(voter_id)
+
+            # Determine threshold: 70% of non-bot members (default 7/10)
+            nonbots = [m for m in vc.members if not getattr(m, 'bot', False)]
+            import math
+            threshold = max(1, math.ceil(0.7 * len(nonbots)))
+
+            # Update message with vote progress
+            chan = bot.get_channel(self.channel_id)
+            msg_id = lobby_status.get(self.channel_id, {}).get("message_id")
+            if chan and msg_id:
+                try:
+                    msg = await chan.fetch_message(msg_id)
+                    embed = build_roster_embed(st)
+                    await msg.edit(embed=embed, view=DraftView(self.channel_id))
+                except Exception:
+                    pass
+
+            if len(st["rehost_votes"]) >= threshold:
+                # Trigger rehost: reset captains and restart picking
+                prev_caps = (st.get("captain_ct"), st.get("captain_t"))
+                st["rehost_votes"] = set()
+                try:
+                    await interaction.response.send_message("Rehosting…", ephemeral=True, delete_after=3)
+                except Exception:
+                    pass
+                await rehost_picking(chan, prev_caps)
+            else:
+                await interaction.response.send_message(
+                    f"ReHost vote registered {len(st['rehost_votes'])}/{threshold}.",
+                    ephemeral=True,
+                    delete_after=5
+                )
 
 
 async def handle_pick_select(interaction: discord.Interaction, channel_id: int, selected_id: str):
@@ -647,8 +709,31 @@ def build_roster_embed(st):
     e.add_field(name="Team 2 (T)", value=t2, inline=True)
     
     # Add empty field to maintain 2-column layout
-    e.add_field(name="\u200b", value="\u200b", inline=True)
+    votes = st.get("rehost_votes")
+    if isinstance(votes, set):
+        e.add_field(name="ReHost votes", value=f"{len(votes)} vote(s)", inline=True)
+    else:
+        e.add_field(name="\u200b", value="\u200b", inline=True)
     return e
+
+async def rehost_picking(channel: discord.TextChannel, previous_captains):
+    """Re-select captains while respecting party logic, then restart picking with the same lobby members."""
+    try:
+        vc = channel.guild.get_channel(config.LOBBY_VOICE_CHANNEL_ID)
+        if not vc:
+            await channel.send("⚠️ Rehost failed: Lobby voice channel not found.")
+            return
+        # Shuffle participants to avoid selecting same captains repeatedly
+        import random as _r
+        members = [m for m in vc.members if not getattr(m, 'bot', False)]
+        _r.shuffle(members)
+        # Start a fresh picking stage with the current members; start_picking_stage already handles parties
+        await start_picking_stage(channel, members)
+    except Exception as e:
+        try:
+            await channel.send(f"⚠️ Rehost failed: {e}")
+        except Exception:
+            pass
 
 async def announce_teams_final(channel: discord.TextChannel, match_id, chosen_map, st):
     print("\n=== Starting Team Announcement ===")
@@ -1346,6 +1431,21 @@ async def on_message(message: discord.Message):
             p["elo_change"] = player_elo_changes.get(p["name"], 0)
 
     # Ensure missing players are included in the final results
+    # Attach snapshot ELO to each player for this match
+    def snapshot_with_elo(players_list):
+        snap = []
+        for p in players_list:
+            p_copy = dict(p)
+            # pull current ELO from players database at submission time
+            for v in player_data.values():
+                if v.get("nick", "").lower() == p_copy.get("name", "").lower():
+                    p_copy["elo"] = int(v.get("elo", config.DEFAULT_ELO))
+                    break
+            if "elo" not in p_copy:
+                p_copy["elo"] = int(config.DEFAULT_ELO)
+            snap.append(p_copy)
+        return snap
+
     # Store the submission in results.json
     results_data[match_id] = {
         "match_id": match_id,
@@ -1357,8 +1457,8 @@ async def on_message(message: discord.Message):
         "map": original_match["map"],
         "mvp": mvp_player,  # Use our newly calculated MVP
         "mvp_kills": max_kills,  # Store MVP's kill count
-        "winning_team": winning_team,  # Use our updated teams that include missing players
-        "losing_team": losing_team  # Use our updated teams that include missing players
+        "winning_team": snapshot_with_elo(winning_team),  # Include per-player ELO snapshot
+        "losing_team": snapshot_with_elo(losing_team)  # Include per-player ELO snapshot
     }
     save_results()
 
@@ -1384,6 +1484,12 @@ async def on_message(message: discord.Message):
             ),
             view=None
         )
+        # Auto-delete the confirmation after 7 seconds to keep the channel tidy
+        try:
+            await asyncio.sleep(7)
+            await loading_msg.delete()
+        except Exception:
+            pass
     except Exception as e:
         print(f"Failed to edit loading message: {e}")
         try:
@@ -1394,7 +1500,7 @@ async def on_message(message: discord.Message):
                     color=discord.Color.green()
                 ),
                 ephemeral=True,
-                delete_after=15
+                delete_after=7
             )
         except Exception as e:
             print(f"Failed to send completion message: {e}")
@@ -1682,6 +1788,10 @@ async def on_voice_state_update(member, before, after):
 
             # If we don't have a tracked message, try to reuse a recent one from this bot
             if not msg:
+                # If a match flow is active, avoid creating a new waiting message to prevent it from appearing on top
+                current_state = status.get("state")
+                if current_state in {"picking", "mapban"}:
+                    return
                 try:
                     async for m in text_channel.history(limit=50):
                         if m.author.id == bot.user.id and m.embeds:

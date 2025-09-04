@@ -145,17 +145,15 @@ class PlayerSelect(View):
         # Create select menu with all players
         select = discord.ui.Select(placeholder="Choose a player")
         
-        # Load current ELOs from players.json for accurate defaults
-        try:
-            with open("players.json", "r") as f:
-                players_db = json.load(f)
-        except Exception:
-            players_db = {}
-
+        # Prefer ELO from this match's stored data (results.json), falling back to 100
         def elo_for_name(name):
-            for v in players_db.values():
-                if v.get("nick", "").lower() == name.lower():
-                    return int(v.get("elo", 100))
+            for team in ["winning_team", "losing_team"]:
+                for p in self.match_data.get(team, []):
+                    if p.get("name", "").lower() == name.lower():
+                        try:
+                            return int(p.get("elo", 100))
+                        except Exception:
+                            return 100
             return 100
 
         # Add players from both teams
