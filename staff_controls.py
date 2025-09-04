@@ -145,12 +145,25 @@ class PlayerSelect(View):
         # Create select menu with all players
         select = discord.ui.Select(placeholder="Choose a player")
         
+        # Load current ELOs from players.json for accurate defaults
+        try:
+            with open("players.json", "r") as f:
+                players_db = json.load(f)
+        except Exception:
+            players_db = {}
+
+        def elo_for_name(name):
+            for v in players_db.values():
+                if v.get("nick", "").lower() == name.lower():
+                    return int(v.get("elo", 100))
+            return 100
+
         # Add players from both teams
         for team in ["winning_team", "losing_team"]:
             for player in match_data[team]:
                 select.add_option(
                     label=player["name"],
-                    value=f"{player['name']}|{player['kills']}|{player['assists']}|{player['deaths']}|{player.get('elo', 1000)}"
+                    value=f"{player['name']}|{player['kills']}|{player['assists']}|{player['deaths']}|{elo_for_name(player['name'])}"
                 )
         
         select.callback = self.select_callback
@@ -197,6 +210,22 @@ async def repost_game_results(bot, guild, match_id, match_data):
                         pass
     except Exception:
         pass
+
+    # Ensure ct_team/t_team exist for template by deriving from winner/loser if missing
+    if not match_data.get('ct_team') or not match_data.get('t_team'):
+        winner = (match_data.get('winner') or '').upper()
+        win_list = match_data.get('winning_team', []) or []
+        lose_list = match_data.get('losing_team', []) or []
+        if winner == 'CT':
+            match_data['ct_team'] = win_list
+            match_data['t_team'] = lose_list
+        elif winner == 'T':
+            match_data['ct_team'] = lose_list
+            match_data['t_team'] = win_list
+        else:
+            # Fallback: keep existing if any, else assign both to winning/losing order
+            match_data.setdefault('ct_team', win_list)
+            match_data.setdefault('t_team', lose_list)
 
     # Build edited embed and image
     embed = create_updated_embed(match_data, player_data, match_id)
