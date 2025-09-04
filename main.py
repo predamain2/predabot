@@ -1664,27 +1664,69 @@ async def on_voice_state_update(member, before, after):
                 pass
 
         # get or create a status message for this text channel
+        # Use a per-channel lock to prevent race conditions
         status = lobby_status.get(text_channel.id, {})
-        msg = None
-        if status.get("message_id"):
-            try:
-                msg = await text_channel.fetch_message(status["message_id"])
-            except Exception:
-                msg = None
+        lock = status.get("lock")
+        if lock is None:
+            lock = asyncio.Lock()
+            status["lock"] = lock
+            lobby_status[text_channel.id] = status
 
-        if not msg:
-            if file_obj is not None:
-                new_msg = await text_channel.send(embed=embed, file=file_obj)
+        async with lock:
+            msg = None
+            if status.get("message_id"):
+                try:
+                    msg = await text_channel.fetch_message(status["message_id"])
+                except Exception:
+                    msg = None
+
+            # If we don't have a tracked message, try to reuse a recent one from this bot
+            if not msg:
+                try:
+                    async for m in text_channel.history(limit=50):
+                        if m.author.id == bot.user.id and m.embeds:
+                            t = (m.embeds[0].title or "").lower()
+                            if "lobby" in t:
+                                msg = m
+                                status["message_id"] = m.id
+                                break
+                except Exception:
+                    pass
+
+            if not msg:
+                if file_obj is not None:
+                    new_msg = await text_channel.send(embed=embed, file=file_obj)
+                else:
+                    new_msg = await text_channel.send(embed=embed)
+                status["message_id"] = new_msg.id
+                status["state"] = "waiting"
+                lobby_status[text_channel.id] = status
+
+                # Clean up older duplicate lobby messages
+                try:
+                    to_delete = []
+                    async for m in text_channel.history(limit=50):
+                        if m.id == new_msg.id:
+                            continue
+                        if m.author.id == bot.user.id and m.embeds:
+                            t = (m.embeds[0].title or "").lower()
+                            if "lobby" in t:
+                                to_delete.append(m)
+                    for m in to_delete:
+                        try:
+                            await m.delete()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
             else:
-                new_msg = await text_channel.send(embed=embed)
-            lobby_status[text_channel.id] = {"message_id": new_msg.id, "state": "waiting"}
-        else:
-            try:
-                # When editing, the original attachment remains, so we only edit the embed
-                await msg.edit(embed=embed, view=None)
-                lobby_status[text_channel.id]["state"] = "waiting"
-            except Exception:
-                pass
+                try:
+                    # When editing, the original attachment remains, so we only edit the embed
+                    await msg.edit(embed=embed, view=None)
+                    status["state"] = "waiting"
+                    lobby_status[text_channel.id] = status
+                except Exception:
+                    pass
 
     # If someone left the lobby and there's an active session, reset
     if left_lobby:
