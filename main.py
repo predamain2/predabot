@@ -1791,7 +1791,21 @@ async def on_voice_state_update(member, before, after):
                 # If a match flow is active, avoid creating a new waiting message to prevent it from appearing on top
                 current_state = status.get("state")
                 if current_state in {"picking", "mapban"}:
-                    return
+                    # Verify it's truly active; if stale, reset to waiting
+                    is_active = False
+                    if current_state == "picking" and active_picks.get(text_channel.id):
+                        is_active = True
+                    elif current_state == "mapban":
+                        try:
+                            map_cog = bot.get_cog('MapBan')
+                            is_active = bool(map_cog and getattr(map_cog, 'active', {}) and text_channel.id in map_cog.active)
+                        except Exception:
+                            is_active = False
+                    if is_active:
+                        return
+                    else:
+                        status["state"] = "waiting"
+                        lobby_status[text_channel.id] = status
                 try:
                     async for m in text_channel.history(limit=50):
                         if m.author.id == bot.user.id and m.embeds:
