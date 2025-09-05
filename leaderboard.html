@@ -25,13 +25,13 @@
         /* Container styling */
         .leaderboard-container {
             width: 100%;
-            max-width: 1000px;
+            max-width: 1200px;
             background: linear-gradient(145deg, #1a1a1a 0%, #2a2a2a 100%);
-            border: 2px solid #ff6b35;
+            border: 2px solid #DC143C;
             border-radius: 16px;
             box-shadow: 
                 0 20px 40px rgba(0,0,0,0.8),
-                0 0 80px rgba(255, 107, 53, 0.2),
+                0 0 80px rgba(220, 20, 60, 0.2),
                 inset 0 1px 0 rgba(255,255,255,0.1);
             position: relative;
             overflow: hidden;
@@ -44,7 +44,7 @@
             left: 0;
             right: 0;
             height: 3px;
-            background: linear-gradient(90deg, #ff6b35, #ff8c42, #ff6b35);
+            background: linear-gradient(90deg, #DC143C, #FF1744, #DC143C);
             animation: pulse 2s ease-in-out infinite;
         }
 
@@ -58,8 +58,8 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 2rem;
-            background: linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%);
+            padding: 1.5rem 2rem;
+            background: linear-gradient(135deg, #DC143C 0%, #FF1744 100%);
             position: relative;
             overflow: hidden;
         }
@@ -85,11 +85,11 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 60px;
-            height: 60px;
+            width: 80px;
+            height: 80px;
             background: url('af_logo.png') center/contain no-repeat;
             filter: brightness(0) invert(1);
-            opacity: 0.3;
+            opacity: 0.4;
             z-index: 1;
         }
 
@@ -108,23 +108,23 @@
         /* Column headers */
         .column-headers {
             display: grid;
-            grid-template-columns: 80px 1fr 120px 120px 120px;
-            padding: 1rem 2rem;
-            background: linear-gradient(135deg, rgba(255, 107, 53, 0.1) 0%, rgba(255, 107, 53, 0.05) 100%);
-            border-bottom: 2px solid rgba(255, 107, 53, 0.3);
+            grid-template-columns: 60px 1fr 100px 100px 100px;
+            padding: 0.8rem 1.5rem;
+            background: linear-gradient(135deg, rgba(220, 20, 60, 0.1) 0%, rgba(220, 20, 60, 0.05) 100%);
+            border-bottom: 2px solid rgba(220, 20, 60, 0.3);
             font-family: 'Orbitron', monospace;
             font-weight: 600;
             text-transform: uppercase;
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             letter-spacing: 2px;
-            color: #ff6b35;
+            color: #DC143C;
         }
 
         /* Player rows */
         .player-row {
             display: grid;
-            grid-template-columns: 80px 1fr 120px 120px 120px;
-            padding: 1.2rem 2rem;
+            grid-template-columns: 60px 1fr 100px 100px 100px;
+            padding: 0.8rem 1.5rem;
             border-bottom: 1px solid rgba(255,255,255,0.1);
             align-items: center;
             transition: all 0.3s ease;
@@ -139,7 +139,7 @@
             left: -100%;
             width: 100%;
             height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 107, 53, 0.1), transparent);
+            background: linear-gradient(90deg, transparent, rgba(220, 20, 60, 0.1), transparent);
             transition: left 0.5s ease;
         }
 
@@ -148,17 +148,17 @@
         }
 
         .player-row:hover {
-            background: linear-gradient(90deg, rgba(255, 107, 53, 0.05) 0%, rgba(255, 107, 53, 0.02) 100%);
+            background: linear-gradient(90deg, rgba(220, 20, 60, 0.05) 0%, rgba(220, 20, 60, 0.02) 100%);
             transform: translateX(8px);
-            border-left: 3px solid #ff6b35;
+            border-left: 3px solid #DC143C;
         }
 
         /* Player ranking */
         .rank {
             font-family: 'Orbitron', monospace;
-            font-size: 1.8rem;
+            font-size: 1.4rem;
             font-weight: 800;
-            color: #ff6b35;
+            color: #DC143C;
             text-shadow: 0 2px 4px rgba(0,0,0,0.5);
         }
 
@@ -166,7 +166,7 @@
         .player-name {
             font-family: 'Inter', sans-serif;
             font-weight: 600;
-            font-size: 1.2rem;
+            font-size: 1rem;
             color: #ffffff;
             text-shadow: 0 2px 4px rgba(0,0,0,0.5);
         }
@@ -176,14 +176,14 @@
             text-align: center;
             font-family: 'Inter', sans-serif;
             font-weight: 600;
-            font-size: 1.1rem;
+            font-size: 0.9rem;
             color: #ffffff;
             text-shadow: 0 2px 4px rgba(0,0,0,0.5);
         }
 
         /* Gradient background for rows */
         .player-row:nth-child(odd) {
-            background: linear-gradient(90deg, rgba(255, 107, 53, 0.02) 0%, rgba(255, 107, 53, 0.01) 100%);
+            background: linear-gradient(90deg, rgba(220, 20, 60, 0.02) 0%, rgba(220, 20, 60, 0.01) 100%);
         }
 
         /* Special styling for top 3 players */
