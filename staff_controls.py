@@ -326,14 +326,20 @@ def create_updated_embed(match_data, player_data, match_id):
         return 1000
     
     # Add team fields
+    def format_player_line(p):
+        name = p['name']
+        kills = p['kills']
+        deaths = p['deaths']
+        elo_change = p.get('elo_change', 0)
+        current_elo = get_elo_for_name(name)
+        before_elo = current_elo - elo_change
+        elo_change_str = f"+{elo_change}" if elo_change >= 0 else str(elo_change)
+        return f"**{name}** {before_elo} → {current_elo} | K:{kills} D:{deaths} | {elo_change_str}"
+    
     for team_name, team in [("Winning Team", match_data["winning_team"]), ("Losing Team", match_data["losing_team"])]:
         embed.add_field(
             name=team_name,
-            value="\n".join(
-                f"{p['name']} (ELO: {get_elo_for_name(p['name'])}) | "
-                f"K:{p['kills']} A:{p['assists']} D:{p['deaths']}"
-                for p in team
-            ) or "—",
+            value="\n".join(format_player_line(p) for p in team) or "—",
             inline=False
         )
     

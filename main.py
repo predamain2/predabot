@@ -804,6 +804,38 @@ async def announce_teams_final(channel: discord.TextChannel, match_id, chosen_ma
     # Get host data from player_data
     host_data = player_data.get(host_key, {})
     
+    # Get their Standoff2 ID
+    host_id = host_data.get('id', '').strip()
+    
+    # If host doesn't have a valid ID, try to find a replacement
+    if not host_id or not host_id.isdigit():
+        # Try the other captain first
+        other_captain = st['captain_t']
+        other_captain_key = str(key_of(other_captain))
+        other_captain_data = player_data.get(other_captain_key, {})
+        other_captain_id = other_captain_data.get('id', '').strip()
+        
+        if other_captain_id and other_captain_id.isdigit():
+            # Use the other captain as host
+            host = other_captain
+            host_key = other_captain_key
+            host_data = other_captain_data
+            host_id = other_captain_id
+        else:
+            # Find any player with a valid ID from all participants
+            all_players = st['team1'] + st['team2']
+            for player in all_players:
+                player_key = str(key_of(player))
+                player_data_item = player_data.get(player_key, {})
+                player_id = player_data_item.get('id', '').strip()
+                if player_id and player_id.isdigit():
+                    # Use this player as host
+                    host = player
+                    host_key = player_key
+                    host_data = player_data_item
+                    host_id = player_id
+                    break
+    
     # Get the display name - use their registered nick, fallback to Discord name if no nick is set
     host_name = host_data.get('nick')  # First try to get registered nickname
     if not host_name:
@@ -811,9 +843,6 @@ async def announce_teams_final(channel: discord.TextChannel, match_id, chosen_ma
             host_name = host.display_name  # Fallback to Discord display name
         else:
             host_name = str(host_key)  # Last resort fallback to ID
-    
-    # Get their Standoff2 ID
-    host_id = host_data.get('id', '').strip()
     
     # Add host info to the template
     if isinstance(host, discord.Member):
@@ -1585,14 +1614,24 @@ async def on_message(message: discord.Message):
                         print(f"Failed to calculate rating for {player['name']}: {e}")
                         player['rating'] = "0.00"
             # Add team fields to embed
+            def format_player_line(p):
+                name = p['name']
+                kills = p['kills']
+                deaths = p['deaths']
+                elo_change = p.get('elo_change', 0)
+                current_elo = get_elo_for_name(name)
+                before_elo = current_elo - elo_change
+                elo_change_str = f"+{elo_change}" if elo_change >= 0 else str(elo_change)
+                return f"**{name}** {before_elo} → {current_elo} | K:{kills} D:{deaths} | {elo_change_str}"
+            
             embed.add_field(
                 name="Winning Team",
-                value="\n".join(f"{p['name']} (ELO: {get_elo_for_name(p['name'])}) | K:{p['kills']} A:{p['assists']} D:{p['deaths']}" for p in match_data.get("winning_team", [])) or "—",
+                value="\n".join(format_player_line(p) for p in match_data.get("winning_team", [])) or "—",
                 inline=False
             )
             embed.add_field(
                 name="Losing Team",
-                value="\n".join(f"{p['name']} (ELO: {get_elo_for_name(p['name'])}) | K:{p['kills']} A:{p['assists']} D:{p['deaths']}" for p in match_data.get("losing_team", [])) or "—",
+                value="\n".join(format_player_line(p) for p in match_data.get("losing_team", [])) or "—",
                 inline=False
             )
             
