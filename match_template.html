@@ -3,21 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Match Details</title>
+    <title>Arena FACEIT Match</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Teko:wght@300;400;500;600;700&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Orbitron:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         * {
             box-sizing: border-box;
+            margin: 0;
+            padding: 0;
         }
 
         body {
-            font-family: 'Teko', 'Rajdhani', sans-serif;
-            background: radial-gradient(ellipse at center, #1a1a2e 0%, #16213e 50%, #0f0f23 100%);
-            background-attachment: fixed;
-            margin: 0;
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f0f0f 0%, #1a1a1a 50%, #0f0f0f 100%);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -25,104 +25,179 @@
             padding: 1rem;
         }
 
-        #match-container {
+        .arena-container {
             width: 100%;
-            max-width: 1200px; /* Increased width */
-            background: 
-                linear-gradient(135deg, rgba(255,255,255,0.02) 0%, transparent 50%),
-                linear-gradient(225deg, rgba(0,150,255,0.03) 0%, transparent 30%),
-                linear-gradient(315deg, rgba(255,100,0,0.03) 0%, transparent 30%),
-                radial-gradient(circle at 30% 30%, rgba(100,200,255,0.08) 0%, transparent 50%),
-                radial-gradient(circle at 70% 70%, rgba(255,150,100,0.08) 0%, transparent 50%),
-                linear-gradient(145deg, #1e1e3f 0%, #2a2a4a 20%, #1a1a35 50%, #2d2d48 80%, #1b1b36 100%);
-            border: 1px solid rgba(255,255,255,0.08);
+            max-width: 1400px;
+            background: linear-gradient(145deg, #1a1a1a 0%, #2a2a2a 100%);
+            border: 2px solid #ff6b35;
+            border-radius: 16px;
             box-shadow: 
-                0 25px 50px rgba(0,0,0,0.5),
-                0 0 100px rgba(0,100,200,0.1),
-                inset 0 1px 0 rgba(255,255,255,0.05),
-                inset 0 -1px 0 rgba(0,0,0,0.2);
-            backdrop-filter: blur(10px);
+                0 20px 40px rgba(0,0,0,0.8),
+                0 0 80px rgba(255, 107, 53, 0.2),
+                inset 0 1px 0 rgba(255,255,255,0.1);
             position: relative;
             overflow: hidden;
-            border-radius: 12px;
         }
 
-        #match-container::before {
+        .arena-container::before {
             content: '';
             position: absolute;
             top: 0;
             left: 0;
             right: 0;
-            height: 2px;
-            background: linear-gradient(90deg, transparent, rgba(0,150,255,0.5), rgba(255,100,50,0.5), transparent);
-            animation: shimmer 3s ease-in-out infinite;
+            height: 3px;
+            background: linear-gradient(90deg, #ff6b35, #ff8c42, #ff6b35);
+            animation: pulse 2s ease-in-out infinite;
         }
 
-        @keyframes shimmer {
-            0%, 100% { opacity: 0.3; }
-            50% { opacity: 0.8; }
+        @keyframes pulse {
+            0%, 100% { opacity: 0.8; }
+            50% { opacity: 1; }
         }
 
         .header {
-            text-align: center;
-            padding: 2rem;
-            background: linear-gradient(to bottom, rgba(0,0,0,0.3), transparent);
+            background: linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%);
+            padding: 1.5rem 2rem;
             position: relative;
             overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
         }
 
-        .header::after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 1px;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+        .header-left {
+            flex: 1;
+            text-align: left;
         }
 
-        .match-title {
-            font-size: 3rem;
+        .header-center {
+            flex: 1;
+            text-align: center;
+            position: relative;
+        }
+
+        .header-right {
+            flex: 1;
+            text-align: right;
+        }
+
+        .map-name {
+            font-family: 'Orbitron', monospace;
+            font-size: 1.8rem;
             font-weight: 700;
             color: #ffffff;
             text-transform: uppercase;
-            letter-spacing: 4px;
-            text-shadow: 
-                0 0 20px rgba(255,255,255,0.3),
-                0 5px 15px rgba(0,0,0,0.8);
-            margin: 0;
-            background: linear-gradient(135deg, #ffffff 0%, #e0e8ff 50%, #ffffff 100%);
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
+            letter-spacing: 2px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
         }
 
-        .match-subtitle {
-            font-size: 1.5rem;
-            color: rgba(255,255,255,0.7);
-            margin-top: 0.5rem;
+        .match-title {
+            font-family: 'Orbitron', monospace;
+            font-size: 2.2rem;
+            font-weight: 900;
+            color: #ffffff;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            text-shadow: 0 4px 8px rgba(0,0,0,0.5);
+        }
+
+        .match-id {
+            font-family: 'Orbitron', monospace;
+            font-size: 1.6rem;
+            font-weight: 600;
+            color: #ffffff;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .arena-logo {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60px;
+            height: 60px;
+            background: url('af_logo.png') center/contain no-repeat;
+            filter: brightness(0) invert(1);
+            opacity: 0.3;
+            z-index: 1;
+        }
+
+        .arena-branding {
+            position: absolute;
+            bottom: 0.5rem;
+            right: 1rem;
+            font-family: 'Orbitron', monospace;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: rgba(255,255,255,0.8);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .teams-container {
+            display: flex;
+            min-height: 400px;
         }
 
         .team-section {
+            flex: 1;
             padding: 2rem;
             position: relative;
         }
 
+        .team-ct {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%);
+            border-right: 2px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .team-t {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%);
+        }
+
         .team-header {
-            font-size: 1.75rem;
-            font-weight: 600;
-            margin-bottom: 1.5rem;
+            font-family: 'Orbitron', monospace;
+            font-size: 1.6rem;
+            font-weight: 800;
+            margin-bottom: 0.5rem;
             text-transform: uppercase;
             letter-spacing: 2px;
-            text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+            text-align: center;
+            padding: 0.8rem;
+            border-radius: 8px;
+            position: relative;
         }
 
         .team-ct .team-header {
             color: #60a5fa;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(59, 130, 246, 0.1) 100%);
+            border: 1px solid rgba(59, 130, 246, 0.3);
         }
 
         .team-t .team-header {
-            color: #f97316;
+            color: #f87171;
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .team-subtitle {
+            font-family: 'Inter', sans-serif;
+            font-size: 1rem;
+            font-weight: 500;
+            text-align: center;
+            margin-bottom: 1.5rem;
+            color: rgba(255,255,255,0.7);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .team-ct .team-subtitle {
+            color: #93c5fd;
+        }
+
+        .team-t .team-subtitle {
+            color: #fca5a5;
         }
 
         .player-list {
@@ -130,71 +205,149 @@
             padding: 0;
             margin: 0;
         }
-        
-        /* Updated Player Item Styles */
+
         .player-item {
             display: flex;
             align-items: center;
-            padding: 0.75rem 1.5rem; /* Adjusted padding */
-            background: linear-gradient(90deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.1) 100%);
-            border-radius: 8px;
-            margin-bottom: 0.5rem;
+            padding: 1rem 1.5rem;
+            background: linear-gradient(90deg, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0.2) 100%);
+            border-radius: 10px;
+            margin-bottom: 0.75rem;
             transition: all 0.3s ease;
+            border: 1px solid rgba(255,255,255,0.1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .player-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .player-item:hover::before {
+            left: 100%;
         }
 
         .player-item:hover {
-            transform: translateX(5px);
-            background: linear-gradient(90deg, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0.2) 100%);
+            transform: translateX(8px);
+            background: linear-gradient(90deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.3) 100%);
+            border-color: rgba(255,255,255,0.2);
+        }
+
+        .level-icon {
+            width: 32px;
+            height: 32px;
+            margin-right: 1rem;
+            border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.2);
+            flex-shrink: 0;
         }
 
         .player-name {
-            font-size: 1.5rem; /* Slightly larger font size */
-            font-weight: 500;
+            font-size: 1.4rem;
+            font-weight: 600;
             color: #ffffff;
-            line-height: 1.2;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
         }
 
+        .empty-team {
+            text-align: center;
+            padding: 2rem;
+            color: rgba(255,255,255,0.5);
+            font-style: italic;
+        }
+
+        .host-info {
+            background: linear-gradient(135deg, rgba(255, 107, 53, 0.1) 0%, rgba(255, 107, 53, 0.05) 100%);
+            border-top: 2px solid #ff6b35;
+            padding: 1.5rem;
+            text-align: center;
+        }
+
+        .host-text {
+            color: #ff6b35;
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .host-id {
+            font-family: 'Orbitron', monospace;
+            background: rgba(0,0,0,0.3);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            border: 1px solid #ff6b35;
+            display: inline-block;
+            margin-top: 0.5rem;
+            color: #ffffff;
+            font-weight: 500;
+        }
     </style>
 </head>
 <body>
-    <div id="match-container">
+    <div class="arena-container">
         <div class="header">
-            <h1 class="match-title">Match #{{ match_data.match_id }}</h1>
-            <div class="match-subtitle">{{ match_data.map_name }}</div>
+            <div class="header-left">
+                <div class="map-name">{{ match_data.map_name }}</div>
+            </div>
+            <div class="header-center">
+                <div class="arena-logo"></div>
+                <h1 class="match-title">Match Start</h1>
+            </div>
+            <div class="header-right">
+                <div class="match-id">#{{ match_data.match_id }}</div>
+            </div>
+            <div class="arena-branding">Arena FACEIT</div>
         </div>
         
-        <div style="display: flex; flex-wrap: wrap; gap: 0;"> <div class="team-section team-ct" style="flex: 1; min-width: 300px;">
-                <h2 class="team-header">Counter-Terrorists</h2>
+        <div class="teams-container">
+            <div class="team-section team-ct">
+                <h2 class="team-header">Team {{ match_data.team1[0].name if match_data.team1 else 'CT' }}</h2>
+                <div class="team-subtitle">Counter Terrorist</div>
                 <ul class="player-list">
                     {% for player in match_data.team1 %}
                     <li class="player-item">
+                        <img src="level_icons/{{ player.level or 1 }}.png" alt="Level {{ player.level or 1 }}" class="level-icon">
                         <span class="player-name">{{ player.name }}</span>
                     </li>
                     {% endfor %}
                     {% if not match_data.team1 %}
-                    <li class="player-item" style="justify-content: center;">
-                        <span class="player-name">No players yet</span>
+                    <li class="empty-team">
+                        <span>No players yet</span>
                     </li>
                     {% endif %}
                 </ul>
             </div>
 
-            <div class="team-section team-t" style="flex: 1; min-width: 300px;">
-                <h2 class="team-header">Terrorists</h2>
+            <div class="team-section team-t">
+                <h2 class="team-header">Team {{ match_data.team2[0].name if match_data.team2 else 'T' }}</h2>
+                <div class="team-subtitle">Terrorist</div>
                 <ul class="player-list">
                     {% for player in match_data.team2 %}
                     <li class="player-item">
+                        <img src="level_icons/{{ player.level or 1 }}.png" alt="Level {{ player.level or 1 }}" class="level-icon">
                         <span class="player-name">{{ player.name }}</span>
                     </li>
                     {% endfor %}
                     {% if not match_data.team2 %}
-                     <li class="player-item" style="justify-content: center;">
-                        <span class="player-name">No players yet</span>
+                    <li class="empty-team">
+                        <span>No players yet</span>
                     </li>
                     {% endif %}
                 </ul>
             </div>
+        </div>
 
+        <div class="host-info">
+            <div class="host-text">Host: {{ match_data.host_name }}</div>
+            {% if match_data.host_id %}
+            <div class="host-id">ID: {{ match_data.host_id }}</div>
+            {% endif %}
         </div>
     </div>
 </body>
