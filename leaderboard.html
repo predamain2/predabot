@@ -78,14 +78,13 @@
 
         .arena-logo {
             position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 120px;
-            height: 120px;
+            top: 1rem;
+            right: 1rem;
+            width: 60px;
+            height: 60px;
             background: url('af_logo.png') center/contain no-repeat;
             opacity: 0.9;
-            z-index: 1;
+            z-index: 2;
         }
 
         .arena-branding {
@@ -188,20 +187,20 @@
         }
 
         /* Special styling for top 3 players */
-        .player-row:nth-child(2) .rank {
-            color: #FFD700;
+        .rank-gold {
+            color: #FFD700 !important;
             text-shadow: 0 0 15px rgba(255, 215, 0, 0.8);
             font-size: 1.6rem;
         }
 
-        .player-row:nth-child(3) .rank {
-            color: #C0C0C0;
+        .rank-silver {
+            color: #C0C0C0 !important;
             text-shadow: 0 0 15px rgba(192, 192, 192, 0.8);
             font-size: 1.6rem;
         }
 
-        .player-row:nth-child(4) .rank {
-            color: #CD7F32;
+        .rank-bronze {
+            color: #CD7F32 !important;
             text-shadow: 0 0 15px rgba(205, 127, 50, 0.8);
             font-size: 1.6rem;
         }
@@ -223,7 +222,7 @@
         </div>
         {% for player in players %}
         <div class="player-row">
-            <div class="rank">{{ player.rank }}</div>
+            <div class="rank {% if player.rank == 1 %}rank-gold{% elif player.rank == 2 %}rank-silver{% elif player.rank == 3 %}rank-bronze{% endif %}">{{ player.rank }}</div>
             <div class="player-name">{{ player.nick }}</div>
             <div class="stat">{{ player.winrate }}%</div>
             <div class="stat">{{ player.kd }}</div>
