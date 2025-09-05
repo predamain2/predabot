@@ -774,29 +774,60 @@ async def announce_teams_final(channel: discord.TextChannel, match_id, chosen_ma
     team1 = format_player_data(st['team1'])
     team2 = format_player_data(st['team2'])
     
-    # Read the HTML template
-    with open('match_template.html', 'r') as f:
-        template_content = f.read()
-    
-    # Replace template variables with actual data
-    match_html = template_content.replace('{{ match_id }}', str(match_id))
-    match_html = match_html.replace('{{ map_name }}', chosen_map)
-    
-    # Create a temporary file for the HTML
-    temp_file = 'temp_match.html'
-    
-    # Write the template to a temporary file
-    with open('match_template.html', 'r', encoding='utf-8') as f:
-        template_content = f.read()
+    # Calculate team statistics
+    def calculate_team_stats(team_members):
+        """Calculate team statistics from player data"""
+        total_elo = 0
+        total_wins = 0
+        total_games = 0
+        valid_players = 0
         
-    with open(temp_file, 'w', encoding='utf-8') as f:
-        f.write(template_content)
-    
-    # Create a temporary file to store the rendered HTML
-    temp_file = 'temp_match.html'
-    with open(temp_file, 'w', encoding='utf-8') as f:
-        f.write(match_html)
+        for member in team_members:
+            pdata = player_data.get(key_of(member), {})
+            if pdata:
+                # Get ELO (default to 1000 if not set)
+                elo = pdata.get('elo', 1000)
+                total_elo += elo
+                
+                # Get wins and losses
+                wins = pdata.get('wins', 0)
+                losses = pdata.get('losses', 0)
+                total_wins += wins
+                total_games += (wins + losses)
+                valid_players += 1
         
+        if valid_players == 0:
+            return {
+                'avg_elo': 1000,
+                'total_wins': 0,
+                'win_rate': 0,
+                'strength_percentage': 50
+            }
+        
+        # Calculate averages
+        avg_elo = total_elo / valid_players
+        win_rate = (total_wins / total_games * 100) if total_games > 0 else 0
+        
+        # Calculate strength percentage based on ELO and win rate
+        # ELO factor (0-50%): Higher ELO = higher strength
+        elo_factor = min(50, (avg_elo - 1000) / 20)  # 20 ELO = 1% strength
+        
+        # Win rate factor (0-50%): Higher win rate = higher strength  
+        win_rate_factor = min(50, win_rate / 2)  # 2% win rate = 1% strength
+        
+        strength_percentage = max(10, min(90, 50 + elo_factor + win_rate_factor))
+        
+        return {
+            'avg_elo': int(avg_elo),
+            'total_wins': total_wins,
+            'win_rate': round(win_rate, 1),
+            'strength_percentage': int(strength_percentage)
+        }
+    
+    # Calculate stats for both teams
+    team1_stats = calculate_team_stats(st['team1'])
+    team2_stats = calculate_team_stats(st['team2'])
+    
     # Get the host (captain_ct) information
     host = st['captain_ct']
     host_key = str(key_of(host))  # Convert to string ID
@@ -856,6 +887,8 @@ async def announce_teams_final(channel: discord.TextChannel, match_id, chosen_ma
         'map_name': chosen_map,
         'team1': team1 or [],
         'team2': team2 or [],
+        'team1_stats': team1_stats,
+        'team2_stats': team2_stats,
         'host_mention': host_mention,
         'host_name': host_name,
         'host_id': host_id if host_id and host_id.isdigit() else ''
@@ -863,7 +896,7 @@ async def announce_teams_final(channel: discord.TextChannel, match_id, chosen_ma
     
     # Render HTML to image
     image_file = 'temp_match.png'
-    await render_html_to_image(match_data, image_file, temp_file)
+    await render_html_to_image(match_data, image_file, 'match_template.html')
     
     # Create the Discord attachment
     file = discord.File(image_file)
@@ -899,7 +932,6 @@ async def announce_teams_final(channel: discord.TextChannel, match_id, chosen_ma
 
     # Clean up the temporary files
     try:
-        os.remove(temp_file)
         os.remove(image_file)
     except Exception as e:
         print(f"Warning: Could not remove temp files: {e}")
