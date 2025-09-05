@@ -88,6 +88,20 @@ party_invites = {}  # keyed by invited_id -> {leader_id, expires_at}
 timeouts = load_timeouts() # user_id -> timeout_end_timestamp
 
 # ---------- Utility helpers ----------
+def staff_mod_owner_only():
+    """Slash-command check: allow only users with Staff/Moderator/Owner roles configured in config.py"""
+    async def predicate(interaction: discord.Interaction) -> bool:
+        role_ids = {
+            int(getattr(config, 'OWNER_ROLE_ID', 0) or 0),
+            int(getattr(config, 'STAFF_ROLE_ID', 0) or 0),
+            int(getattr(config, 'MODERATOR_ROLE_ID', 0) or 0),
+        }
+        role_ids.discard(0)
+        if not role_ids:
+            # If not configured, fall back to administrators only
+            return interaction.user.guild_permissions.administrator
+        return any(getattr(r, 'id', 0) in role_ids for r in getattr(interaction.user, 'roles', []))
+    return discord.app_commands.check(predicate)
 def is_player_timed_out(user_id):
     """Check if a player is currently timed out"""
     current_time = time.time()
@@ -310,7 +324,7 @@ class HostInfoButton(discord.ui.Button):
             ])
         
         embed.description = "\n".join(info_lines)
-        embed.set_footer(text="You can copy the ID by tapping it on mobile")
+        embed.set_footer(text="Powered by Arena | Developed by narcissist.")
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -1587,12 +1601,12 @@ async def on_message(message: discord.Message):
             
             # Different footer for staff channel
             if channel_id == staff_results_id:
-                embed.set_footer(text="Use the buttons below to edit match stats.")
+                embed.set_footer(text="Powered by Arena | Developed by narcissist.")
                 view = StaffMatchControls(match_id, match_data, bot)
                 embed.set_image(url="attachment://" + output_file)
                 await dest.send(file=file, embed=embed, view=view)
             else:
-                embed.set_footer(text="Stats updated automatically.")
+                embed.set_footer(text="Powered by Arena | Developed by narcissist.")
                 embed.set_image(url="attachment://" + output_file)
                 await dest.send(file=file, embed=embed)
             
@@ -1751,7 +1765,7 @@ async def on_voice_state_update(member, before, after):
         else:
             embed.add_field(name="Current players", value="No players yet — be the first!", inline=False)
 
-        embed.set_footer(text="Standoff 2 FACEIT · Fair play. Good vibes.")
+        embed.set_footer(text="Powered by Arena | Developed by narcissist.")
 
         # Try to add a thumbnail logo if present
         logo_filename = "af_logo.png"
@@ -2338,7 +2352,7 @@ async def party_kick(interaction: discord.Interaction, player: discord.Member):
         await commands_channel.send(f"<@{kicked_id}> has been kicked from <@{leader_id}>'s party.")
     await interaction.followup.send(f"Kicked <@{kicked_id}> from your party.", ephemeral=True)
 @bot.tree.command(name="timeout", description="Timeout a user from the voice channel")
-@commands.has_permissions(administrator=True)
+@staff_mod_owner_only()
 @discord.app_commands.describe(user="The user to timeout", minutes="Timeout duration in minutes")
 async def timeout(interaction: discord.Interaction, user: discord.Member, minutes: int = 5):
     await interaction.response.defer(ephemeral=True)
@@ -2374,9 +2388,9 @@ async def timeout_status(interaction: discord.Interaction):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-@bot.tree.command(name="remove_timeout", description="Remove timeout from a player (Admin only)")
+@bot.tree.command(name="remove_timeout", description="Remove a player's timeout (Staff/Mod/Owner)")
 @discord.app_commands.describe(player="The player to remove timeout from")
-@commands.has_permissions(administrator=True)
+@staff_mod_owner_only()
 async def remove_timeout(interaction: discord.Interaction, player: discord.Member):
     user_id = str(player.id)
     

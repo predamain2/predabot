@@ -28,6 +28,46 @@ class General(commands.Cog):
             await self.post_leaderboard(guild)
         
     @commands.hybrid_command(
+        name='resetnicks',
+        description="Reset all user nicknames to their default names"
+    )
+    @commands.has_role(1390707547849097409)  # Owner role ID
+    async def reset_all_nicknames(self, ctx):
+        await ctx.defer(ephemeral=True)
+        
+        try:
+            # Get all members and reset their nicknames
+            guild = ctx.guild
+            count = 0
+            failed = 0
+            
+            # Reset nicknames
+            for member in guild.members:
+                try:
+                    # Only reset if they have a nickname set
+                    if member.nick:
+                        await member.edit(nick=None)  # Setting to None reverts to default username
+                        count += 1
+                except discord.Forbidden:
+                    failed += 1
+                    continue
+                except Exception as e:
+                    print(f"Error resetting nickname for {member}: {e}")
+                    failed += 1
+                    continue
+            
+            # Send completion message
+            await ctx.followup.send(
+                f"✅ Reset complete!\n"
+                f"Successfully reset: {count} nicknames\n"
+                f"Failed to reset: {failed} nicknames"
+            )
+                                        
+        except Exception as e:
+            await ctx.followup.send(f"❌ An error occurred: {str(e)}")
+            return
+        
+    @commands.hybrid_command(
         name='leaderboard',
         description="Show the current leaderboard standings"
     )
@@ -184,11 +224,19 @@ class General(commands.Cog):
             # Convert to discord.File
             file = discord.File(BytesIO(png_data), filename='leaderboard.png')
             
+            # Build embed wrapper
+            embed = discord.Embed(
+                title="Arena Top 10 Players",
+                color=discord.Color.orange()
+            )
+            embed.set_image(url="attachment://leaderboard.png")
+            embed.set_footer(text="Powered by Arena | Developed by narcissist.")
+            
             # Send to channel
             leaderboard_channel = guild.get_channel(LEADERBOARD_CHANNEL_ID)
             if leaderboard_channel:
                 await leaderboard_channel.purge(limit=5)
-                await leaderboard_channel.send(file=file)
+                await leaderboard_channel.send(file=file, embed=embed)
             
             # Clean up temp file
             temp_html.unlink(missing_ok=True)

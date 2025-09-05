@@ -337,5 +337,5 @@ def create_updated_embed(match_data, player_data, match_id):
             inline=False
         )
     
-    embed.set_footer(text="Last edited: " + discord.utils.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"))
+    embed.set_footer(text="Powered by Arena | Developed by narcissist.")
     return embed
