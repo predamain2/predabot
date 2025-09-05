@@ -266,6 +266,14 @@
             background: linear-gradient(90deg, #f87171, #ef4444);
         }
 
+        .team1-strength {
+            width: var(--team1-strength, 50%);
+        }
+
+        .team2-strength {
+            width: var(--team2-strength, 50%);
+        }
+
         .strength-text {
             font-size: 0.7rem;
             color: rgba(255,255,255,0.8);
@@ -378,7 +386,7 @@
         }
     </style>
 </head>
-<body>
+<body style="--team1-strength: {{ match_data.team1_stats.strength_percentage if match_data.team1_stats else '50' }}%; --team2-strength: {{ match_data.team2_stats.strength_percentage if match_data.team2_stats else '50' }}%;">
     <div class="arena-container">
         <div class="header">
             <div class="header-left">
@@ -416,7 +424,7 @@
 
                 <div class="strength-indicator">
                     <div class="strength-bar">
-                        <div class="strength-fill" style="width: {{ match_data.team1_stats.strength_percentage if match_data.team1_stats else '50' }}%"></div>
+                        <div class="strength-fill team1-strength"></div>
                     </div>
                 </div>
                 <div class="strength-text">Team Strength</div>
@@ -462,7 +470,7 @@
 
                 <div class="strength-indicator">
                     <div class="strength-bar">
-                        <div class="strength-fill" style="width: {{ match_data.team2_stats.strength_percentage if match_data.team2_stats else '50' }}%"></div>
+                        <div class="strength-fill team2-strength"></div>
                     </div>
                 </div>
                 <div class="strength-text">Team Strength</div>
