@@ -2432,19 +2432,39 @@ async def party_kick(interaction: discord.Interaction, player: discord.Member):
     await interaction.followup.send(f"Kicked <@{kicked_id}> from your party.", ephemeral=True)
 @bot.tree.command(name="timeout", description="Timeout a user from the voice channel")
 @staff_mod_owner_only()
-@discord.app_commands.describe(user="The user to timeout", minutes="Timeout duration in minutes")
-async def timeout(interaction: discord.Interaction, user: discord.Member, minutes: int = 5):
+@discord.app_commands.describe(user="The user to timeout", minutes="Timeout duration in minutes", reason="Reason for the timeout")
+async def timeout(interaction: discord.Interaction, user: discord.Member, minutes: int = 5, reason: str = "No reason provided"):
     await interaction.response.defer(ephemeral=True)
     timeout_end = time.time() + minutes * 60
     timeouts[str(user.id)] = timeout_end
     save_timeouts()
+    
     # Move user out of voice channel if present
     if user.voice and user.voice.channel:
         try:
             await user.move_to(None)
         except Exception:
             pass
-    await interaction.followup.send(f"🚫 {user.mention} has been timed out for {minutes} minutes.", ephemeral=True)
+    
+    # Create a nice embed for the timeout
+    embed = discord.Embed(
+        title="🚫 User Timed Out",
+        color=discord.Color.red(),
+        timestamp=discord.utils.utcnow()
+    )
+    
+    embed.add_field(name="👤 User", value=f"{user.mention} ({user.display_name})", inline=True)
+    embed.add_field(name="⏱️ Duration", value=f"{minutes} minutes", inline=True)
+    embed.add_field(name="📅 Until", value=f"<t:{int(timeout_end)}:F>", inline=True)
+    embed.add_field(name="📝 Reason", value=reason, inline=False)
+    embed.add_field(name="👮 Moderator", value=interaction.user.mention, inline=True)
+    embed.add_field(name="🕐 Time", value=f"<t:{int(time.time())}:F>", inline=True)
+    
+    embed.set_thumbnail(url=user.display_avatar.url)
+    embed.set_footer(text="Arena FACEIT Moderation System")
+    
+    # Send the embed to the channel where the command was used
+    await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="timeout_status", description="Check if you're currently timed out")
 async def timeout_status(interaction: discord.Interaction):

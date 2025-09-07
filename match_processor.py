@@ -184,25 +184,125 @@ def _build_expected_rosters(original_match: dict, player_data: dict) -> tuple[di
                 player_dict[nick] = {"id": discord_id, "data": player_data[discord_id]}
     return team1_players, team2_players
 
+def _normalize_name_for_matching(name: str) -> str:
+    """
+    Normalize a name for better OCR error handling.
+    Handles common OCR mistakes and variations.
+    """
+    if not name:
+        return ""
+    
+    # Convert to lowercase
+    normalized = name.lower().strip()
+    
+    # Common OCR character substitutions
+    ocr_fixes = {
+        'l': 'i',  # lowercase l often misread as i
+        '0': 'o',  # zero often misread as o
+        '1': 'l',  # one often misread as l
+        '5': 's',  # five often misread as s
+        '8': 'b',  # eight often misread as b
+        '6': 'g',  # six often misread as g
+    }
+    
+    # Apply OCR fixes
+    for wrong, correct in ocr_fixes.items():
+        normalized = normalized.replace(wrong, correct)
+    
+    # Remove common OCR artifacts and extra characters
+    # Remove extra repeated characters (like "distincttttttt" -> "distinct")
+    import re
+    normalized = re.sub(r'(.)\1{2,}', r'\1', normalized)  # Remove 3+ repeated chars
+    
+    # Remove common prefixes/suffixes that might be OCR artifacts
+    prefixes_to_remove = ['|', '||', '|||', '~', '`', "'", '"']
+    suffixes_to_remove = ['|', '||', '|||', '~', '`', "'", '"', 'fps', 'fps', 'hz', 'ms']
+    
+    for prefix in prefixes_to_remove:
+        if normalized.startswith(prefix):
+            normalized = normalized[len(prefix):]
+    
+    for suffix in suffixes_to_remove:
+        if normalized.endswith(suffix):
+            normalized = normalized[:-len(suffix)]
+    
+    # Clean up any remaining extra characters
+    normalized = re.sub(r'[^a-z0-9\s]', '', normalized)
+    normalized = re.sub(r'\s+', ' ', normalized).strip()
+    
+    return normalized
+
+def _calculate_name_similarity(scoreboard_name: str, expected_name: str) -> float:
+    """
+    Calculate similarity between scoreboard name and expected name with multiple strategies.
+    Returns the best similarity score found.
+    """
+    if not scoreboard_name or not expected_name:
+        return 0.0
+    
+    # Normalize both names
+    norm_scoreboard = _normalize_name_for_matching(scoreboard_name)
+    norm_expected = _normalize_name_for_matching(expected_name)
+    
+    # Strategy 1: Direct normalized comparison
+    if norm_scoreboard == norm_expected:
+        return 1.0
+    
+    # Strategy 2: Check if one contains the other (for cases like "distincttttttt" vs "distinct")
+    if norm_scoreboard in norm_expected or norm_expected in norm_scoreboard:
+        # Calculate ratio based on length difference
+        shorter = min(len(norm_scoreboard), len(norm_expected))
+        longer = max(len(norm_scoreboard), len(norm_expected))
+        if shorter > 0:
+            return shorter / longer
+    
+    # Strategy 3: Check if one is a substring of the other (for cases like "SAYAN | 120fps" vs "SAyan")
+    # Remove common separators and check
+    clean_scoreboard = re.sub(r'[|\s]+', '', norm_scoreboard)
+    clean_expected = re.sub(r'[|\s]+', '', norm_expected)
+    
+    if clean_scoreboard == clean_expected:
+        return 1.0
+    if clean_scoreboard in clean_expected or clean_expected in clean_scoreboard:
+        shorter = min(len(clean_scoreboard), len(clean_expected))
+        longer = max(len(clean_scoreboard), len(clean_expected))
+        if shorter > 0:
+            return shorter / longer
+    
+    # Strategy 4: Traditional fuzzy matching
+    fuzzy_score = SequenceMatcher(None, norm_scoreboard, norm_expected).ratio()
+    
+    # Strategy 5: Check individual words (for cases like "RHD | SAyan" vs "SAYAN")
+    scoreboard_words = set(norm_scoreboard.split())
+    expected_words = set(norm_expected.split())
+    
+    if scoreboard_words and expected_words:
+        word_overlap = len(scoreboard_words & expected_words)
+        word_union = len(scoreboard_words | expected_words)
+        word_score = word_overlap / word_union if word_union > 0 else 0.0
+    else:
+        word_score = 0.0
+    
+    # Return the best score found
+    return max(fuzzy_score, word_score)
+
 def _find_best_player_matches(
     scoreboard_players: list[dict], expected_names: list[str]
 ) -> dict[str, str]:
     """
     Finds the best unique matches between scoreboard players and expected players.
-    This function calculates a similarity score for every possible pairing and
-    greedily selects the best matches first to avoid incorrect assignments.
+    Uses improved matching logic to handle OCR errors and name variations.
     """
     potential_matches = []
-    threshold = getattr(config, 'FUZZY_MATCH_THRESHOLD', 0.7)
+    threshold = getattr(config, 'FUZZY_MATCH_THRESHOLD', 0.5)  # Lowered threshold for more lenient matching
 
     # 1. Calculate a score for every possible scoreboard-to-expected player pair
     for s_player in scoreboard_players:
         for e_name in expected_names:
-            ratio = SequenceMatcher(
-                None, s_player["name"].lower(), e_name.lower()
-            ).ratio()
-            if ratio >= threshold:
-                potential_matches.append((ratio, s_player["name"], e_name))
+            similarity = _calculate_name_similarity(s_player["name"], e_name)
+            if similarity >= threshold:
+                potential_matches.append((similarity, s_player["name"], e_name))
+                print(f"🔍 Potential match: '{s_player['name']}' -> '{e_name}' (similarity: {similarity:.2f})")
 
     # 2. Sort all potential matches from highest score (best match) to lowest
     potential_matches.sort(key=lambda x: x[0], reverse=True)
@@ -217,6 +317,7 @@ def _find_best_player_matches(
             best_matches[s_name] = e_name
             used_scoreboard_names.add(s_name)
             used_expected_names.add(e_name)
+            print(f"✅ Matched: '{s_name}' -> '{e_name}'")
 
     return best_matches
 

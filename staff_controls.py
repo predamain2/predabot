@@ -373,8 +373,10 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
     async def view_submissions(self, interaction: discord.Interaction):
         """View all currently submitting matches"""
         try:
-            # Import the submission tracking from main.py
-            from main import active_submissions, pending_upload
+            # Access the submission tracking through the bot's module
+            import main
+            active_submissions = main.active_submissions
+            pending_upload = main.pending_upload
             
             # Debug logging
             print(f"DEBUG - active_submissions: {active_submissions}")
@@ -449,7 +451,9 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
     async def clear_submission(self, interaction: discord.Interaction, match_id: str):
         """Clear a stuck match submission"""
         try:
-            from main import active_submissions, pending_upload
+            import main
+            active_submissions = main.active_submissions
+            pending_upload = main.pending_upload
             
             # Check if match ID exists in active submissions
             if match_id not in active_submissions:
@@ -506,7 +510,9 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
     async def clear_all_submissions(self, interaction: discord.Interaction):
         """Clear all stuck match submissions"""
         try:
-            from main import active_submissions, pending_upload
+            import main
+            active_submissions = main.active_submissions
+            pending_upload = main.pending_upload
             
             if not active_submissions and not pending_upload:
                 await interaction.response.send_message(
@@ -555,7 +561,9 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
     async def create_test_submission(self, interaction: discord.Interaction, match_id: str):
         """Create a test stuck submission"""
         try:
-            from main import active_submissions, pending_upload
+            import main
+            active_submissions = main.active_submissions
+            pending_upload = main.pending_upload
             
             # Add to active submissions
             active_submissions.add(match_id)
@@ -574,3 +582,216 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
             )
         except Exception as e:
             await interaction.response.send_message(f"❌ Error creating test submission: {str(e)}", ephemeral=True)
+
+    @discord.app_commands.command(name="revert_scoreboard", description="Revert a match scoreboard and remove it from results")
+    @staff_only_check()
+    @discord.app_commands.describe(match_id="The match ID to revert")
+    async def revert_scoreboard(self, interaction: discord.Interaction, match_id: str):
+        """Revert a match scoreboard"""
+        try:
+            # Load necessary data
+            with open("results.json", "r") as f:
+                results = json.load(f)
+            with open("players.json", "r") as f:
+                player_data = json.load(f)
+                
+            if match_id not in results:
+                await interaction.response.send_message("❌ Match not found in results database.", ephemeral=True)
+                return
+
+            match_data = results[match_id]
+
+            # Revert player stats
+            for team in ["winning_team", "losing_team"]:
+                for player in match_data[team]:
+                    player_name = player["name"]
+                    # Find player in player_data
+                    for player_id, data in player_data.items():
+                        if data["nick"].lower() == player_name.lower():
+                            # Revert wins/losses
+                            if team == "winning_team":
+                                data["wins"] = max(0, data["wins"] - 1)
+                            else:
+                                data["losses"] = max(0, data["losses"] - 1)
+                            break
+
+            # Save updated player stats
+            with open("players.json", "w") as f:
+                json.dump(player_data, f, indent=2)
+
+            # Remove match from results.json
+            del results[match_id]
+            with open("results.json", "w") as f:
+                json.dump(results, f, indent=2)
+
+            # Remove embeds/images from both channels
+            await remove_match_embeds(self.bot, match_id)
+
+            # Update leaderboard after reverting stats
+            general_cog = self.bot.get_cog('General')
+            if general_cog:
+                await general_cog.update_leaderboard()
+
+            await interaction.response.send_message(
+                f"✅ Match {match_id} has been reverted:\n"
+                f"• Removed from results database\n"
+                f"• Player stats updated\n"
+                f"• Embeds deleted from results channels\n"
+                f"• Leaderboard refreshed\n"
+                f"The match ID can be submitted again.", 
+                ephemeral=True
+            )
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error reverting scoreboard: {str(e)}", ephemeral=True)
+
+    @discord.app_commands.command(name="edit_player_stats", description="Edit a player's stats in a specific match")
+    @staff_only_check()
+    @discord.app_commands.describe(
+        match_id="The match ID to edit",
+        player_name="The player's name to edit"
+    )
+    async def edit_player_stats(self, interaction: discord.Interaction, match_id: str, player_name: str):
+        """Edit a player's stats in a match using a modal"""
+        try:
+            with open("results.json", "r") as f:
+                results = json.load(f)
+            
+            if match_id not in results:
+                await interaction.response.send_message("❌ Match not found in results database.", ephemeral=True)
+                return
+
+            match_data = results[match_id]
+            player_found = None
+            
+            # Find the player in both teams
+            for team in ["winning_team", "losing_team"]:
+                for player in match_data[team]:
+                    if player["name"].lower() == player_name.lower():
+                        player_found = player
+                        break
+                if player_found:
+                    break
+            
+            if not player_found:
+                await interaction.response.send_message(f"❌ Player '{player_name}' not found in match {match_id}.", ephemeral=True)
+                return
+
+            # Create and send the modal with current values
+            modal = EditPlayerStatsModal(match_id, player_name, player_found, self.bot)
+            await interaction.response.send_modal(modal)
+
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error loading player stats: {str(e)}", ephemeral=True)
+
+class EditPlayerStatsModal(Modal):
+    def __init__(self, match_id: str, player_name: str, player_data: dict, bot):
+        super().__init__(title=f"Edit Stats for {player_name}")
+        self.match_id = match_id
+        self.player_name = player_name
+        self.player_data = player_data
+        self.bot = bot
+        
+        # Create text inputs with current values pre-filled
+        self.kills = TextInput(
+            label="Kills", 
+            default=str(player_data.get("kills", 0)), 
+            required=True, 
+            min_length=1, 
+            max_length=3
+        )
+        self.assists = TextInput(
+            label="Assists", 
+            default=str(player_data.get("assists", 0)), 
+            required=True, 
+            min_length=1, 
+            max_length=3
+        )
+        self.deaths = TextInput(
+            label="Deaths", 
+            default=str(player_data.get("deaths", 0)), 
+            required=True, 
+            min_length=1, 
+            max_length=3
+        )
+        self.elo_change = TextInput(
+            label="ELO Change", 
+            default=str(player_data.get("elo_change", 0)), 
+            required=True, 
+            min_length=1, 
+            max_length=5,
+            placeholder="Positive for wins, negative for losses"
+        )
+        
+        self.add_item(self.kills)
+        self.add_item(self.assists)
+        self.add_item(self.deaths)
+        self.add_item(self.elo_change)
+        
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            # Validate inputs
+            try:
+                kills = int(self.kills.value)
+                assists = int(self.assists.value)
+                deaths = int(self.deaths.value)
+                elo_change = int(self.elo_change.value)
+            except ValueError:
+                await interaction.response.send_message("❌ All values must be valid numbers.", ephemeral=True)
+                return
+            
+            # Load match data
+            with open("results.json", "r") as f:
+                results = json.load(f)
+            
+            match_data = results[self.match_id]
+            updated = False
+            
+            # Find and update the player in both teams
+            for team in ["winning_team", "losing_team"]:
+                for player in match_data[team]:
+                    if player["name"].lower() == self.player_name.lower():
+                        # Store old values for logging
+                        old_kills = player["kills"]
+                        old_assists = player["assists"]
+                        old_deaths = player["deaths"]
+                        old_elo_change = player.get("elo_change", 0)
+                        
+                        # Update stats
+                        player["kills"] = kills
+                        player["assists"] = assists
+                        player["deaths"] = deaths
+                        player["elo_change"] = elo_change
+                        
+                        # Recalculate K/D ratio
+                        kd = kills if deaths == 0 else round(kills / deaths, 2)
+                        player["kd"] = kd
+                        
+                        updated = True
+                        break
+                if updated:
+                    break
+            
+            if not updated:
+                await interaction.response.send_message(f"❌ Player '{self.player_name}' not found in match {self.match_id}.", ephemeral=True)
+                return
+
+            # Save the updated results
+            with open("results.json", "w") as f:
+                json.dump(results, f, indent=2)
+
+            # Repost the updated results
+            await repost_game_results(self.bot, interaction.guild, self.match_id, match_data)
+
+            await interaction.response.send_message(
+                f"✅ Updated stats for {self.player_name} in match {self.match_id}:\n"
+                f"• Kills: {old_kills} → {kills}\n"
+                f"• Assists: {old_assists} → {assists}\n"
+                f"• Deaths: {old_deaths} → {deaths}\n"
+                f"• ELO Change: {old_elo_change:+} → {elo_change:+}\n"
+                f"• K/D Ratio: {player['kd']:.2f}\n\n"
+                f"Results have been reposted with updated information.",
+                ephemeral=True
+            )
+
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error editing player stats: {str(e)}", ephemeral=True)
