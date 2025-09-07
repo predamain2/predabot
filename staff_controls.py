@@ -3,6 +3,8 @@ from discord.ui import Button, View, Modal, TextInput
 import json
 from pathlib import Path
 import asyncio
+import time
+import config
 
 class EditMatchModal(Modal):
     def __init__(self, match_id, player_name, current_kills, current_assists, current_deaths, current_elo, bot):
@@ -345,3 +347,183 @@ def create_updated_embed(match_data, player_data, match_id):
     
     embed.set_footer(text="Powered by Arena | Developed by narcissist.")
     return embed
+
+# Staff submission management commands
+def staff_only_check():
+    """Check if user has staff, moderator, or owner role"""
+    async def predicate(interaction: discord.Interaction) -> bool:
+        role_ids = {
+            int(getattr(config, 'OWNER_ROLE_ID', 0) or 0),
+            int(getattr(config, 'STAFF_ROLE_ID', 0) or 0),
+            int(getattr(config, 'MODERATOR_ROLE_ID', 0) or 0),
+        }
+        role_ids.discard(0)
+        if not role_ids:
+            # If not configured, fall back to administrators only
+            return interaction.user.guild_permissions.administrator
+        return any(getattr(r, 'id', 0) in role_ids for r in getattr(interaction.user, 'roles', []))
+    return discord.app_commands.check(predicate)
+
+class SubmissionManagementCog(discord.ext.commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+
+    @discord.app_commands.command(name="submissions", description="View currently submitting matches")
+    @staff_only_check()
+    async def view_submissions(self, interaction: discord.Interaction):
+        """View all currently submitting matches"""
+        try:
+            # Import the submission tracking from main.py
+            from main import active_submissions, pending_upload
+            
+            if not active_submissions and not pending_upload:
+                embed = discord.Embed(
+                    title="📋 Active Submissions",
+                    description="No matches are currently being submitted.",
+                    color=discord.Color.green()
+                )
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                return
+            
+            embed = discord.Embed(
+                title="📋 Active Submissions",
+                description="Currently submitting matches:",
+                color=discord.Color.orange()
+            )
+            
+            # Add active submissions
+            if active_submissions:
+                submission_list = []
+                for match_id in active_submissions:
+                    # Find the user who is submitting this match
+                    submitter_info = None
+                    for user_id, data in pending_upload.items():
+                        if data.get('match_id') == match_id:
+                            submitter_info = data
+                            break
+                    
+                    if submitter_info:
+                        user = self.bot.get_user(int(user_id))
+                        user_name = user.display_name if user else f"User {user_id}"
+                        elapsed = int(time.time() - submitter_info.get('started_at', time.time()))
+                        submission_list.append(f"**Match {match_id}** - {user_name} ({elapsed}s ago)")
+                    else:
+                        submission_list.append(f"**Match {match_id}** - Unknown user")
+                
+                embed.add_field(
+                    name="🔄 Currently Submitting",
+                    value="\n".join(submission_list) if submission_list else "None",
+                    inline=False
+                )
+            
+            # Add pending uploads without active submissions (orphaned)
+            orphaned = []
+            for user_id, data in pending_upload.items():
+                if data.get('match_id') not in active_submissions:
+                    user = self.bot.get_user(int(user_id))
+                    user_name = user.display_name if user else f"User {user_id}"
+                    elapsed = int(time.time() - data.get('started_at', time.time()))
+                    orphaned.append(f"**Match {data.get('match_id')}** - {user_name} ({elapsed}s ago)")
+            
+            if orphaned:
+                embed.add_field(
+                    name="⚠️ Orphaned Submissions",
+                    value="\n".join(orphaned),
+                    inline=False
+                )
+            
+            embed.set_footer(text="Use /clear_submission <match_id> to clear stuck submissions")
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error viewing submissions: {str(e)}", ephemeral=True)
+
+    @discord.app_commands.command(name="clear_submission", description="Clear a stuck match submission")
+    @staff_only_check()
+    async def clear_submission(self, interaction: discord.Interaction, match_id: str):
+        """Clear a stuck match submission"""
+        try:
+            from main import active_submissions, pending_upload
+            
+            # Check if match ID exists in active submissions
+            if match_id not in active_submissions:
+                # Check if it exists in pending uploads
+                found_in_pending = False
+                user_to_remove = None
+                for user_id, data in pending_upload.items():
+                    if data.get('match_id') == match_id:
+                        found_in_pending = True
+                        user_to_remove = user_id
+                        break
+                
+                if not found_in_pending:
+                    await interaction.response.send_message(
+                        f"❌ Match ID `{match_id}` is not currently being submitted.", 
+                        ephemeral=True
+                    )
+                    return
+                else:
+                    # Remove from pending uploads
+                    del pending_upload[user_to_remove]
+                    await interaction.response.send_message(
+                        f"✅ Cleared orphaned submission for Match ID `{match_id}`.", 
+                        ephemeral=True
+                    )
+                    return
+            
+            # Find the user who was submitting this match
+            submitter_user = None
+            for user_id, data in pending_upload.items():
+                if data.get('match_id') == match_id:
+                    submitter_user = self.bot.get_user(int(user_id))
+                    break
+            
+            # Remove from both tracking systems
+            active_submissions.discard(match_id)
+            for user_id, data in list(pending_upload.items()):
+                if data.get('match_id') == match_id:
+                    del pending_upload[user_id]
+                    break
+            
+            user_name = submitter_user.display_name if submitter_user else "Unknown user"
+            await interaction.response.send_message(
+                f"✅ Cleared submission for Match ID `{match_id}` (was being submitted by {user_name}).\n"
+                f"The match ID is now available for submission again.",
+                ephemeral=True
+            )
+            
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error clearing submission: {str(e)}", ephemeral=True)
+
+    @discord.app_commands.command(name="clear_all_submissions", description="Clear all stuck match submissions")
+    @staff_only_check()
+    async def clear_all_submissions(self, interaction: discord.Interaction):
+        """Clear all stuck match submissions"""
+        try:
+            from main import active_submissions, pending_upload
+            
+            if not active_submissions and not pending_upload:
+                await interaction.response.send_message(
+                    "ℹ️ No active submissions to clear.", 
+                    ephemeral=True
+                )
+                return
+            
+            # Count submissions before clearing
+            active_count = len(active_submissions)
+            pending_count = len(pending_upload)
+            
+            # Clear all submissions
+            active_submissions.clear()
+            pending_upload.clear()
+            
+            await interaction.response.send_message(
+                f"✅ Cleared all submissions:\n"
+                f"• {active_count} active submissions\n"
+                f"• {pending_count} pending uploads\n\n"
+                f"All match IDs are now available for submission again.",
+                ephemeral=True
+            )
+            
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error clearing all submissions: {str(e)}", ephemeral=True)

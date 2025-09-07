@@ -768,6 +768,7 @@ async def announce_teams_final(channel: discord.TextChannel, match_id, chosen_ma
                 'name': name,
                 'mention': f"<@{discord_id}>",
                 'id': pdata.get('id', ''),
+                'level': pdata.get('level', 1),
             })
         return players
     
@@ -2473,5 +2474,18 @@ async def remove_timeout(interaction: discord.Interaction, player: discord.Membe
         await interaction.response.send_message(f"❌ {player.display_name} is not timed out", ephemeral=True)
 
 
+# Load cogs
+async def load_cogs():
+    """Load all cogs"""
+    try:
+        from staff_controls import SubmissionManagementCog
+        await bot.add_cog(SubmissionManagementCog(bot))
+        print("✅ Loaded SubmissionManagementCog")
+    except Exception as e:
+        print(f"❌ Error loading cogs: {e}")
+
 if __name__ == '__main__':
+    # Load cogs before starting the bot
+    import asyncio
+    asyncio.run(load_cogs())
     bot.run(config.TOKEN)
