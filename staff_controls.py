@@ -383,8 +383,16 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
             print(f"DEBUG - pending_upload: {pending_upload}")
             print(f"DEBUG - active_submissions type: {type(active_submissions)}")
             print(f"DEBUG - pending_upload type: {type(pending_upload)}")
+            print(f"DEBUG - active_submissions length: {len(active_submissions) if active_submissions else 'None'}")
+            print(f"DEBUG - pending_upload length: {len(pending_upload) if pending_upload else 'None'}")
             
-            if not active_submissions and not pending_upload:
+            # Check if both are empty
+            has_active = active_submissions and len(active_submissions) > 0
+            has_pending = pending_upload and len(pending_upload) > 0
+            
+            print(f"DEBUG - has_active: {has_active}, has_pending: {has_pending}")
+            
+            if not has_active and not has_pending:
                 embed = discord.Embed(
                     title="📋 Active Submissions",
                     description="No matches are currently being submitted.",
@@ -558,10 +566,12 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
 
     @discord.app_commands.command(name="create_test_submission", description="Create a test stuck submission for debugging")
     @staff_only_check()
+    @discord.app_commands.describe(match_id="The match ID to create a test submission for")
     async def create_test_submission(self, interaction: discord.Interaction, match_id: str):
         """Create a test stuck submission"""
         try:
             import main
+            import time
             active_submissions = main.active_submissions
             pending_upload = main.pending_upload
             
@@ -583,6 +593,94 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
         except Exception as e:
             await interaction.response.send_message(f"❌ Error creating test submission: {str(e)}", ephemeral=True)
 
+    @discord.app_commands.command(name="debug_submissions", description="Debug submission system variables")
+    @staff_only_check()
+    async def debug_submissions(self, interaction: discord.Interaction):
+        """Debug the submission system variables"""
+        try:
+            import main
+            
+            embed = discord.Embed(
+                title="🔍 Submission System Debug",
+                color=discord.Color.blue()
+            )
+            
+            embed.add_field(
+                name="Active Submissions", 
+                value=f"```{main.active_submissions}```", 
+                inline=False
+            )
+            embed.add_field(
+                name="Pending Upload", 
+                value=f"```{main.pending_upload}```", 
+                inline=False
+            )
+            embed.add_field(
+                name="Active Count", 
+                value=str(len(main.active_submissions)), 
+                inline=True
+            )
+            embed.add_field(
+                name="Pending Count", 
+                value=str(len(main.pending_upload)), 
+                inline=True
+            )
+            
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error debugging submissions: {str(e)}", ephemeral=True)
+
+    @discord.app_commands.command(name="list_matches", description="List all available matches in the database")
+    @staff_only_check()
+    async def list_matches(self, interaction: discord.Interaction):
+        """List all matches in results.json"""
+        try:
+            with open("results.json", "r") as f:
+                results = json.load(f)
+            
+            if not results:
+                await interaction.response.send_message("📋 No matches found in the database.", ephemeral=True)
+                return
+            
+            embed = discord.Embed(
+                title="📋 Available Matches",
+                description=f"Found {len(results)} matches in the database:",
+                color=discord.Color.blue()
+            )
+            
+            # Show match IDs with their details
+            match_list = []
+            for match_id, match_data in list(results.items())[:20]:  # Show first 20
+                # Get match date if available
+                match_date = match_data.get('timestamp', 'Unknown date')
+                if isinstance(match_date, (int, float)):
+                    from datetime import datetime
+                    match_date = datetime.fromtimestamp(match_date).strftime('%Y-%m-%d %H:%M')
+                
+                # Get winning team info
+                winning_team = match_data.get('winning_team', [])
+                winning_players = [p.get('name', 'Unknown') for p in winning_team[:2]]  # First 2 players
+                winning_str = ', '.join(winning_players)
+                if len(winning_team) > 2:
+                    winning_str += f" +{len(winning_team)-2} more"
+                
+                match_list.append(f"**{match_id}** - {winning_str} ({match_date})")
+            
+            if len(results) > 20:
+                match_list.append(f"... and {len(results) - 20} more matches")
+            
+            embed.add_field(
+                name="Matches", 
+                value="\n".join(match_list) if match_list else "No matches",
+                inline=False
+            )
+            
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error listing matches: {str(e)}", ephemeral=True)
+
     @discord.app_commands.command(name="revert_scoreboard", description="Revert a match scoreboard and remove it from results")
     @staff_only_check()
     @discord.app_commands.describe(match_id="The match ID to revert")
@@ -594,12 +692,57 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
                 results = json.load(f)
             with open("players.json", "r") as f:
                 player_data = json.load(f)
+            
+            # Debug: Show available match IDs
+            available_matches = list(results.keys())
+            print(f"DEBUG - Available match IDs: {available_matches}")
+            print(f"DEBUG - Looking for match ID: '{match_id}'")
+            print(f"DEBUG - Match ID type: {type(match_id)}")
+            print(f"DEBUG - Available match ID types: {[type(m) for m in available_matches]}")
+            
+            # Try different matching strategies
+            match_found = False
+            actual_match_id = None
+            
+            # First try exact match
+            if match_id in results:
+                match_found = True
+                actual_match_id = match_id
+            else:
+                # Try with stripped whitespace
+                stripped_id = match_id.strip()
+                if stripped_id in results:
+                    match_found = True
+                    actual_match_id = stripped_id
+                else:
+                    # Try case-insensitive match
+                    for key in results.keys():
+                        if str(key).lower() == str(match_id).lower():
+                            match_found = True
+                            actual_match_id = key
+                            break
                 
-            if match_id not in results:
-                await interaction.response.send_message("❌ Match not found in results database.", ephemeral=True)
+            if not match_found:
+                # Show available matches for debugging
+                available_list = "\n".join(available_matches[:10])  # Show first 10
+                if len(available_matches) > 10:
+                    available_list += f"\n... and {len(available_matches) - 10} more"
+                
+                embed = discord.Embed(
+                    title="❌ Match Not Found",
+                    description=f"Match ID `{match_id}` not found in results database.",
+                    color=discord.Color.red()
+                )
+                embed.add_field(
+                    name="Available Match IDs", 
+                    value=f"```{available_list}```" if available_list else "No matches found",
+                    inline=False
+                )
+                await interaction.response.send_message(embed=embed, ephemeral=True)
                 return
 
-            match_data = results[match_id]
+            # Use the actual match ID that was found
+            match_data = results[actual_match_id]
 
             # Revert player stats
             for team in ["winning_team", "losing_team"]:
@@ -620,7 +763,7 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
                 json.dump(player_data, f, indent=2)
 
             # Remove match from results.json
-            del results[match_id]
+            del results[actual_match_id]
             with open("results.json", "w") as f:
                 json.dump(results, f, indent=2)
 
@@ -628,17 +771,32 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
             await remove_match_embeds(self.bot, match_id)
 
             # Update leaderboard after reverting stats
-            general_cog = self.bot.get_cog('General')
-            if general_cog:
-                await general_cog.update_leaderboard()
+            leaderboard_updated = False
+            try:
+                general_cog = self.bot.get_cog('General')
+                if general_cog and hasattr(general_cog, 'update_leaderboard'):
+                    await general_cog.update_leaderboard()
+                    leaderboard_updated = True
+            except Exception as e:
+                print(f"Warning: Could not update leaderboard: {e}")
+
+            # Prepare success message
+            success_parts = [
+                f"✅ Match {actual_match_id} has been reverted:",
+                "• Removed from results database",
+                "• Player stats updated", 
+                "• Embeds deleted from results channels"
+            ]
+            
+            if leaderboard_updated:
+                success_parts.append("• Leaderboard refreshed")
+            else:
+                success_parts.append("• Leaderboard update skipped (cog not available)")
+                
+            success_parts.append("The match ID can be submitted again.")
 
             await interaction.response.send_message(
-                f"✅ Match {match_id} has been reverted:\n"
-                f"• Removed from results database\n"
-                f"• Player stats updated\n"
-                f"• Embeds deleted from results channels\n"
-                f"• Leaderboard refreshed\n"
-                f"The match ID can be submitted again.", 
+                "\n".join(success_parts), 
                 ephemeral=True
             )
         except Exception as e:

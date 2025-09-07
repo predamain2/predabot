@@ -2463,8 +2463,15 @@ async def timeout(interaction: discord.Interaction, user: discord.Member, minute
     embed.set_thumbnail(url=user.display_avatar.url)
     embed.set_footer(text="Arena FACEIT Moderation System")
     
-    # Send the embed to the channel where the command was used
-    await interaction.followup.send(embed=embed)
+    # Send confirmation to the command user
+    await interaction.followup.send("✅ User has been timed out successfully.", ephemeral=True)
+    
+    # Send the embed to the timeout notification channel
+    timeout_channel = bot.get_channel(config.TIMEOUT_NOTIFICATION_CHANNEL_ID)
+    if timeout_channel:
+        await timeout_channel.send(embed=embed)
+    else:
+        print(f"❌ Could not find timeout notification channel with ID: {config.TIMEOUT_NOTIFICATION_CHANNEL_ID}")
 
 @bot.tree.command(name="timeout_status", description="Check if you're currently timed out")
 async def timeout_status(interaction: discord.Interaction):
