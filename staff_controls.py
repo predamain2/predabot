@@ -376,6 +376,12 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
             # Import the submission tracking from main.py
             from main import active_submissions, pending_upload
             
+            # Debug logging
+            print(f"DEBUG - active_submissions: {active_submissions}")
+            print(f"DEBUG - pending_upload: {pending_upload}")
+            print(f"DEBUG - active_submissions type: {type(active_submissions)}")
+            print(f"DEBUG - pending_upload type: {type(pending_upload)}")
+            
             if not active_submissions and not pending_upload:
                 embed = discord.Embed(
                     title="📋 Active Submissions",
@@ -527,3 +533,44 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
             
         except Exception as e:
             await interaction.response.send_message(f"❌ Error clearing all submissions: {str(e)}", ephemeral=True)
+
+    @discord.app_commands.command(name="test_submission_commands", description="Test if submission commands are working")
+    @staff_only_check()
+    async def test_commands(self, interaction: discord.Interaction):
+        """Test command to verify the cog is working"""
+        try:
+            await interaction.response.send_message(
+                "✅ Submission management commands are working!\n"
+                "You should be able to use:\n"
+                "• `/submissions` - View active submissions\n"
+                "• `/clear_submission <match_id>` - Clear specific submission\n"
+                "• `/clear_all_submissions` - Clear all submissions",
+                ephemeral=True
+            )
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error in test command: {str(e)}", ephemeral=True)
+
+    @discord.app_commands.command(name="create_test_submission", description="Create a test stuck submission for debugging")
+    @staff_only_check()
+    async def create_test_submission(self, interaction: discord.Interaction, match_id: str):
+        """Create a test stuck submission"""
+        try:
+            from main import active_submissions, pending_upload
+            
+            # Add to active submissions
+            active_submissions.add(match_id)
+            
+            # Add to pending upload
+            pending_upload[str(interaction.user.id)] = {
+                "channel_id": interaction.channel.id,
+                "match_id": match_id,
+                "started_at": time.time()
+            }
+            
+            await interaction.response.send_message(
+                f"✅ Created test submission for Match ID `{match_id}`\n"
+                f"Now try `/submissions` to see if it shows up!",
+                ephemeral=True
+            )
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error creating test submission: {str(e)}", ephemeral=True)

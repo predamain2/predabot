@@ -1720,6 +1720,13 @@ async def on_ready():
         print('map_ban loaded')
     except Exception as e:
         print('map_ban load error', e)
+        
+    try:
+        from staff_controls import SubmissionManagementCog
+        await bot.add_cog(SubmissionManagementCog(bot))
+        print('✅ Loaded SubmissionManagementCog')
+    except Exception as e:
+        print(f'❌ Error loading SubmissionManagementCog: {e}')
 
     guild = bot.get_guild(config.GUILD_ID)
     if not guild:
@@ -2474,18 +2481,5 @@ async def remove_timeout(interaction: discord.Interaction, player: discord.Membe
         await interaction.response.send_message(f"❌ {player.display_name} is not timed out", ephemeral=True)
 
 
-# Load cogs
-async def load_cogs():
-    """Load all cogs"""
-    try:
-        from staff_controls import SubmissionManagementCog
-        await bot.add_cog(SubmissionManagementCog(bot))
-        print("✅ Loaded SubmissionManagementCog")
-    except Exception as e:
-        print(f"❌ Error loading cogs: {e}")
-
 if __name__ == '__main__':
-    # Load cogs before starting the bot
-    import asyncio
-    asyncio.run(load_cogs())
     bot.run(config.TOKEN)
