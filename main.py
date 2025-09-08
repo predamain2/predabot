@@ -262,24 +262,28 @@ async def render_html_to_image(match_data, output_path, html_template='scoreboar
                     print(f"Error calculating rating for player {player.get('name')}: {e}")
                     player['rating'] = "0.00"
     
-    # Ensure each player's level is present and correct for icon rendering
+    # Ensure each player's level is computed from players DB ELO for icon rendering
     try:
         name_to_player = {v.get("nick", "").lower(): v for v in player_data.values()}
+        id_to_player = {str(k): v for k, v in player_data.items()}
     except Exception:
         name_to_player = {}
+        id_to_player = {}
     for team in ['ct_team', 't_team']:
         if team in match_data:
             for player in match_data[team]:
+                pd = None
+                # Prefer match by stored Discord/user id if provided
                 try:
-                    # Respect provided numeric level if present
-                    raw_level = str(player.get('level', '')).strip()
-                    if raw_level != '':
-                        player['level'] = int(raw_level)
-                        continue
+                    pid = str(player.get('id', '')).strip()
+                    if pid:
+                        pd = id_to_player.get(pid)
                 except Exception:
-                    pass
-                # Prefer stored player_data (by nickname), compute from ELO
-                pd = name_to_player.get(str(player.get('name', '')).lower())
+                    pd = None
+                # Fallback to nickname match (case-insensitive)
+                if not pd:
+                    pd = name_to_player.get(str(player.get('name', '')).lower())
+                # Compute level from ELO
                 if pd:
                     try:
                         elo_value = int(pd.get('elo', config.DEFAULT_ELO))
@@ -287,13 +291,13 @@ async def render_html_to_image(match_data, output_path, html_template='scoreboar
                         continue
                     except Exception:
                         pass
-                # Fallback: compute from snapshot ELO on the player if present
-                if 'elo' in player and str(player['elo']).strip() != '':
-                    try:
+                # Fallback: compute from ELO on the player snapshot if present
+                try:
+                    if 'elo' in player and str(player['elo']).strip() != '':
                         player['level'] = int(config.get_level_from_elo(int(player['elo'])))
                         continue
-                    except Exception:
-                        pass
+                except Exception:
+                    pass
                 # Default
                 player['level'] = 1
 
