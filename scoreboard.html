@@ -212,6 +212,7 @@
             letter-spacing: 4px;
             color: #ffffff;
             text-shadow: 0 4px 8px rgba(0,0,0,0.6);
+            font-size: 2.2rem;
         }
 
         .footer-section {
@@ -225,6 +226,41 @@
             font-weight: 700;
             letter-spacing: 2px;
         }
+
+        /* Player grid columns */
+        .player-grid { margin-top: 0.5rem; }
+        .player-grid-header {
+            display: grid;
+            grid-template-columns: minmax(220px, 1fr) repeat(4, 6rem);
+            gap: 0.75rem;
+            padding: 0.5rem 0.75rem;
+            background: rgba(0,0,0,0.25);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+        }
+        .grid-label {
+            font-family: 'Orbitron', monospace;
+            font-size: 0.9rem;
+            color: rgba(255,255,255,0.75);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            text-align: center;
+        }
+        .grid-label:first-child { text-align: left; }
+        .player-grid-row {
+            display: grid;
+            grid-template-columns: minmax(220px, 1fr) repeat(4, 6rem);
+            gap: 0.75rem;
+            align-items: center;
+            background: linear-gradient(90deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.3) 100%);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+        .player-grid-cell { color: #ffffff; text-align: center; font-weight: 600; }
+        .player-grid-cell:first-child { text-align: left; }
 
         .section-divider {
             position: relative;
@@ -422,11 +458,9 @@
             </div>
             <div class="header-center">
                 <div class="arena-logo"></div>
-                <h1 class="match-title">Match Result</h1>
+                <h1 class="match-title">{{ match_data.score }}</h1>
             </div>
-            <div class="header-right">
-                <div class="match-id">Score {{ match_data.score }}</div>
-            </div>
+            <div class="header-right"></div>
             <div class="arena-branding">Arena FACEIT</div>
         </div>
 
@@ -435,53 +469,72 @@
                 <h2 class="team-header">Team {{ match_data.ct_team[0].name if match_data.ct_team else 'CT' }}</h2>
                 <div class="team-subtitle">Counter Terrorist</div>
 
-                <ul class="player-list">
+                <div class="player-grid">
+                    <div class="player-grid-header">
+                        <div class="grid-label">Player</div>
+                        <div class="grid-label">Kills</div>
+                        <div class="grid-label">Assists</div>
+                        <div class="grid-label">Deaths</div>
+                        <div class="grid-label">Elo</div>
+                    </div>
                     {% for p in match_data.ct_team %}
-                    <li class="player-item">
-                        <div class="player-info">
-                            <img src="level_icons/{{ p.level or 1 }}.png" alt="Level {{ p.level or 1 }}" class="level-icon">
-                            <span class="player-name">{{ p.name }}</span>
+                    <div class="player-grid-row">
+                        <div class="player-grid-cell">
+                            <div class="player-info">
+                                <img src="level_icons/{{ p.level or p.faceit_level or 1 }}.png" alt="Level {{ p.level or p.faceit_level or 1 }}" class="level-icon">
+                                <span class="player-name">{{ p.name }}</span>
+                            </div>
                         </div>
-                        <div class="player-stats">
-                            <span class="stat-badge">K {{ p.kills }}</span>
-                            <span class="stat-badge">A {{ p.assists }}</span>
-                            <span class="stat-badge">D {{ p.deaths }}</span>
-                            <span class="stat-badge">R {{ p.rating }}</span>
+                        <div class="player-grid-cell">{{ p.kills }}</div>
+                        <div class="player-grid-cell">{{ p.assists }}</div>
+                        <div class="player-grid-cell">{{ p.deaths }}</div>
+                        <div class="player-grid-cell">
                             <span class="elo-badge {{ 'elo-positive' if p.elo_change >= 0 else 'elo-negative' }}">{{ '+' if p.elo_change >= 0 else '' }}{{ p.elo_change }}</span>
                         </div>
-                    </li>
+                    </div>
                     {% endfor %}
                     {% if not match_data.ct_team %}
-                    <li class="empty-team"><span>No players yet</span></li>
+                    <div class="empty-team"><span>No players yet</span></div>
                     {% endif %}
-                </ul>
+                </div>
             </div>
 
             <div class="team-section team-t">
                 <h2 class="team-header">Team {{ match_data.t_team[0].name if match_data.t_team else 'T' }}</h2>
                 <div class="team-subtitle">Terrorist</div>
 
-                <ul class="player-list">
+                <div class="player-grid">
+                    <div class="player-grid-header">
+                        <div class="grid-label">Player</div>
+                        <div class="grid-label">Kills</div>
+                        <div class="grid-label">Assists</div>
+                        <div class="grid-label">Deaths</div>
+                        <div class="grid-label">Elo</div>
+                    </div>
                     {% for p in match_data.t_team %}
-                    <li class="player-item">
-                        <div class="player-info">
-                            <img src="level_icons/{{ p.level or 1 }}.png" alt="Level {{ p.level or 1 }}" class="level-icon">
-                            <span class="player-name">{{ p.name }}</span>
+                    <div class="player-grid-row">
+                        <div class="player-grid-cell">
+                            <div class="player-info">
+                                <img src="level_icons/{{ p.level or p.faceit_level or 1 }}.png" alt="Level {{ p.level or p.faceit_level or 1 }}" class="level-icon">
+                                <span class="player-name">{{ p.name }}</span>
+                            </div>
                         </div>
-                        <div class="player-stats">
-                            <span class="stat-badge">R {{ p.rating }}</span>
-                            <span class="stat-badge">D {{ p.deaths }}</span>
-                            <span class="stat-badge">A {{ p.assists }}</span>
-                            <span class="stat-badge">K {{ p.kills }}</span>
+                        <div class="player-grid-cell">{{ p.kills }}</div>
+                        <div class="player-grid-cell">{{ p.assists }}</div>
+                        <div class="player-grid-cell">{{ p.deaths }}</div>
+                        <div class="player-grid-cell">
                             <span class="elo-badge {{ 'elo-positive' if p.elo_change >= 0 else 'elo-negative' }}">{{ '+' if p.elo_change >= 0 else '' }}{{ p.elo_change }}</span>
                         </div>
-                    </li>
+                    </div>
                     {% endfor %}
                     {% if not match_data.t_team %}
-                    <li class="empty-team"><span>No players yet</span></li>
+                    <div class="empty-team"><span>No players yet</span></div>
                     {% endif %}
-                </ul>
+                </div>
             </div>
+        </div>
+        <div class="footer-section" style="padding: 1rem; display: flex; align-items: center; justify-content: center;">
+            <span class="match-result-text">Match Result</span>
         </div>
     </div>
 </body>
