@@ -240,98 +240,247 @@
                 radial-gradient(circle at 75% 75%, rgba(249, 115, 22, 0.05) 0%, transparent 50%);
             pointer-events: none;
         }
+        /* Arena layout styles from match_template (trimmed, no animations) */
+        .arena-container {
+            width: 100%;
+            max-width: 1400px;
+            background: linear-gradient(145deg, #1a1a1a 0%, #2a2a2a 100%);
+            border: 2px solid #DC143C;
+            border-radius: 16px;
+            box-shadow:
+                0 20px 40px rgba(0,0,0,0.8),
+                0 0 80px rgba(220, 20, 60, 0.15),
+                inset 0 1px 0 rgba(255,255,255,0.08);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #DC143C 0%, #FF1744 100%);
+            padding: 1.5rem 2rem;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .header-left { flex: 1; text-align: left; }
+        .header-center { flex: 1; text-align: center; position: relative; }
+        .header-right { flex: 1; text-align: right; }
+
+        .map-name {
+            font-family: 'Orbitron', monospace;
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #ffffff;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .match-title {
+            font-family: 'Orbitron', monospace;
+            font-size: 2.2rem;
+            font-weight: 900;
+            color: #ffffff;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            text-shadow: 0 4px 8px rgba(0,0,0,0.5);
+        }
+
+        .match-id {
+            font-family: 'Orbitron', monospace;
+            font-size: 1.6rem;
+            font-weight: 600;
+            color: #ffffff;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .arena-logo {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60px;
+            height: 60px;
+            background: url('af_logo.png') center/contain no-repeat;
+            filter: brightness(0) invert(1);
+            opacity: 0.3;
+            z-index: 1;
+        }
+
+        .arena-branding {
+            position: absolute;
+            bottom: 0.5rem;
+            right: 1rem;
+            font-family: 'Orbitron', monospace;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: rgba(255,255,255,0.85);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .teams-container { display: flex; min-height: 400px; }
+        .team-section { flex: 1; padding: 2rem; position: relative; }
+        .team-ct {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%);
+            border-right: 2px solid rgba(59, 130, 246, 0.3);
+        }
+        .team-t { background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%); }
+
+        .team-header {
+            font-family: 'Orbitron', monospace;
+            font-size: 1.6rem;
+            font-weight: 800;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-align: center;
+            padding: 0.8rem;
+            border-radius: 8px;
+            position: relative;
+        }
+        .team-ct .team-header {
+            color: #60a5fa;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(59, 130, 246, 0.1) 100%);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+        .team-t .team-header {
+            color: #f87171;
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+        .team-subtitle {
+            font-family: 'Inter', sans-serif;
+            font-size: 1rem;
+            font-weight: 500;
+            text-align: center;
+            margin-bottom: 0.75rem;
+            color: rgba(255,255,255,0.7);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .player-list { list-style: none; padding: 0; margin: 0; }
+        .player-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 1.25rem;
+            background: linear-gradient(90deg, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.25) 100%);
+            border-radius: 10px;
+            margin-bottom: 0.75rem;
+            border: 1px solid rgba(255,255,255,0.1);
+            position: relative;
+            overflow: hidden;
+        }
+        .player-info { display: flex; align-items: center; gap: 1rem; }
+        .level-icon {
+            width: 32px; height: 32px; border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.2);
+            flex-shrink: 0;
+        }
+        .player-name {
+            font-size: 1.4rem; font-weight: 600; color: #ffffff;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+        .empty-team { text-align: center; padding: 2rem; color: rgba(255,255,255,0.5); font-style: italic; }
+
+        /* Scoreboard stat badges */
+        .player-stats { display: flex; align-items: center; gap: 0.5rem; }
+        .stat-badge {
+            font-family: 'Inter', sans-serif;
+            font-size: 0.9rem;
+            color: #ffffff;
+            background: rgba(0,0,0,0.35);
+            border: 1px solid rgba(255,255,255,0.12);
+            padding: 0.25rem 0.6rem;
+            border-radius: 9999px;
+            font-weight: 600;
+        }
+        .elo-badge {
+            font-family: 'Orbitron', monospace;
+            font-size: 0.95rem;
+            padding: 0.3rem 0.7rem;
+            border-radius: 9999px;
+            border: 2px solid rgba(255,255,255,0.12);
+            color: #ffffff;
+        }
+        .elo-positive { background: linear-gradient(135deg, #22c55e, #16a34a); }
+        .elo-negative { background: linear-gradient(135deg, #ef4444, #dc2626); }
     </style>
 </head>
-<body class="bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center min-h-screen p-4">
-    <div id="scoreboard-container" class="rounded-xl shadow-2xl overflow-hidden w-full max-w-[95%]">
-        <div class="background-overlay"></div>
-        
-        <!-- Score Header -->
-        <div class="py-8 text-center relative footer-section">
-            <div class="score-background-text">MATCH</div>
-            <h1 id="match-score" class="text-9xl font-bold score-text">{{ match_data.score }}</h1>
+<body>
+    <div class="arena-container">
+        <div class="header">
+            <div class="header-left">
+                <div class="map-name">{{ match_data.map }}</div>
+            </div>
+            <div class="header-center">
+                <div class="arena-logo"></div>
+                <h1 class="match-title">Match Result</h1>
+            </div>
+            <div class="header-right">
+                <div class="match-id">Score {{ match_data.score }}</div>
+            </div>
+            <div class="arena-branding">Arena FACEIT</div>
         </div>
 
-        <!-- Team Headers -->
-        <div class="flex">
-            <div class="w-1/2 text-center text-white team-header team-header-ct">
-                Counter Terrorist
-            </div>
-            <div class="w-1/2 text-center text-white team-header team-header-t">
-                Terrorist
-            </div>
-        </div>
+        <div class="teams-container">
+            <div class="team-section team-ct">
+                <h2 class="team-header">Team {{ match_data.ct_team[0].name if match_data.ct_team else 'CT' }}</h2>
+                <div class="team-subtitle">Counter Terrorist</div>
 
-        <!-- Players Section -->
-        <div class="flex relative">
-            <div class="absolute inset-0 flex items-center justify-center text-white text-9xl font-bold opacity-3 z-0 select-none" style="font-family: 'Rajdhani', sans-serif;"></div>
-            
-            <!-- CT Team -->
-            <div class="w-1/2 p-6 z-10">
-                <div class="stat-header-grid mb-3">
-                    <div class="col-start-3 text-center stat-label text-base">Kills</div>
-                    <div class="text-center stat-label text-base">Assists</div>
-                    <div class="text-center stat-label text-base">Deaths</div>
-                    <div class="text-center stat-label text-base">Rating</div>
-                </div>
-                <div id="ct-players" class="w-full space-y-2">
+                <ul class="player-list">
                     {% for p in match_data.ct_team %}
-                    <div class="player-row player-row-ct">
-                        <div class="elo-circle {{ 'elo-positive' if p.elo_change >= 0 else 'elo-negative' }}">
-                            {{ '+' if p.elo_change >= 0 else '' }}{{ p.elo_change }}
+                    <li class="player-item">
+                        <div class="player-info">
+                            <img src="level_icons/{{ p.level or 1 }}.png" alt="Level {{ p.level or 1 }}" class="level-icon">
+                            <span class="player-name">{{ p.name }}</span>
                         </div>
-                        <div class="text-white font-bold text-2xl player-name">{{ p.name }}</div>
-                        <div class="stat-box text-white text-xl text-center font-semibold">{{ p.kills }}</div>
-                        <div class="stat-box text-white text-xl text-center font-semibold">{{ p.assists }}</div>
-                        <div class="stat-box text-white text-xl text-center font-semibold">{{ p.deaths }}</div>
-                        <div class="stat-box text-white text-xl text-center font-semibold">{{ p.rating }}</div>
-                    </div>
+                        <div class="player-stats">
+                            <span class="stat-badge">K {{ p.kills }}</span>
+                            <span class="stat-badge">A {{ p.assists }}</span>
+                            <span class="stat-badge">D {{ p.deaths }}</span>
+                            <span class="stat-badge">R {{ p.rating }}</span>
+                            <span class="elo-badge {{ 'elo-positive' if p.elo_change >= 0 else 'elo-negative' }}">{{ '+' if p.elo_change >= 0 else '' }}{{ p.elo_change }}</span>
+                        </div>
+                    </li>
                     {% endfor %}
-                </div>
+                    {% if not match_data.ct_team %}
+                    <li class="empty-team"><span>No players yet</span></li>
+                    {% endif %}
+                </ul>
             </div>
 
-            <!-- T Team -->
-            <div class="w-1/2 p-6 z-10">
-                <div class="stat-header-grid stat-header-grid-t mb-3">
-                    <div class="text-center stat-label text-base">Rating</div>
-                    <div class="text-center stat-label text-base">Deaths</div>
-                    <div class="text-center stat-label text-base">Assists</div>
-                    <div class="text-center stat-label text-base">Kills</div>
-                </div>
-                <div id="t-players" class="w-full space-y-2">
+            <div class="team-section team-t">
+                <h2 class="team-header">Team {{ match_data.t_team[0].name if match_data.t_team else 'T' }}</h2>
+                <div class="team-subtitle">Terrorist</div>
+
+                <ul class="player-list">
                     {% for p in match_data.t_team %}
-                    <div class="player-row player-row-t">
-                        <div class="stat-box text-white text-xl text-center font-semibold">{{ p.rating }}</div>
-                        <div class="stat-box text-white text-xl text-center font-semibold">{{ p.deaths }}</div>
-                        <div class="stat-box text-white text-xl text-center font-semibold">{{ p.assists }}</div>
-                        <div class="stat-box text-white text-xl text-center font-semibold">{{ p.kills }}</div>
-                        <div class="text-white font-bold text-2xl player-name">{{ p.name }}</div>
-                        <div class="elo-circle {{ 'elo-positive' if p.elo_change >= 0 else 'elo-negative' }}">
-                            {{ '+' if p.elo_change >= 0 else '' }}{{ p.elo_change }}
+                    <li class="player-item">
+                        <div class="player-info">
+                            <img src="level_icons/{{ p.level or 1 }}.png" alt="Level {{ p.level or 1 }}" class="level-icon">
+                            <span class="player-name">{{ p.name }}</span>
                         </div>
-                    </div>
+                        <div class="player-stats">
+                            <span class="stat-badge">R {{ p.rating }}</span>
+                            <span class="stat-badge">D {{ p.deaths }}</span>
+                            <span class="stat-badge">A {{ p.assists }}</span>
+                            <span class="stat-badge">K {{ p.kills }}</span>
+                            <span class="elo-badge {{ 'elo-positive' if p.elo_change >= 0 else 'elo-negative' }}">{{ '+' if p.elo_change >= 0 else '' }}{{ p.elo_change }}</span>
+                        </div>
+                    </li>
                     {% endfor %}
-                </div>
-            </div>
-        </div>
-
-        <div class="section-divider"></div>
-
-        <!-- Footer -->
-        <div class="flex items-center justify-between p-4 footer-section">
-            <div class="flex items-center space-x-6 text-xl">
-                <span class="text-white font-bold map-text">MAP</span>
-                <span id="map-name" class="text-white map-text">{{ match_data.map }}</span>
-            </div>
-            <div class="flex-grow text-center flex flex-col items-center">
-                <span class="text-white text-5xl match-result-text">MATCH RESULT</span>
-                <div class="text-white text-2xl mt-2">
-                    <span class="font-bold">{{ match_data.winning_captain }}</span>
-                    <span>TEAM WIN</span>
-                </div>
-            </div>
-            <div class="flex items-center space-x-6 text-xl">
-                <span class="text-white font-bold map-text">{{ "CT" if match_data.winner == "CT" else "T" }}</span>
+                    {% if not match_data.t_team %}
+                    <li class="empty-team"><span>No players yet</span></li>
+                    {% endif %}
+                </ul>
             </div>
         </div>
     </div>
