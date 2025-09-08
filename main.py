@@ -1177,6 +1177,7 @@ class SubmitResultsModal(discord.ui.Modal, title="Submit Scoreboard"):
                 "match_id": mid,
                 "started_at": time.time()
             }
+            print(f"Match {mid} submitted by {interaction.user.display_name}: active_submissions={active_submissions}, pending_upload={pending_upload}")
 
             # Response & instructions
             await interaction.response.send_message(
@@ -1299,17 +1300,21 @@ async def on_message(message: discord.Message):
     try:
         match_data = await parse_scoreboard_from_url(attachment.url)
     except Exception as e:
+        print(f"OCR Error for match {match_id}: {e}")
         await loading_msg.edit(embed=discord.Embed(title="Error", description=f"❌ Failed to process scoreboard: {e}", color=discord.Color.red()))
         active_submissions.discard(match_id)
         del pending_upload[message.author.id]
+        print(f"Cleaned up after OCR error: active_submissions={active_submissions}, pending_upload={pending_upload}")
         return
 
     # Process match data with missing players
     from match_processor import get_teams_from_match_data, calculate_rating, validate_teams
     try:
         if not validate_teams(match_data):  # Add validation check here
+            print(f"Validation failed for match {match_id}: insufficient players")
             active_submissions.discard(match_id)  # Free up the match ID
             del pending_upload[message.author.id]
+            print(f"Cleaned up after validation error: active_submissions={active_submissions}, pending_upload={pending_upload}")
             await loading_msg.edit(embed=discord.Embed(
                 title="Error",
                 description="❌ Match submission rejected: At least one player must be present on each team.",
@@ -1348,9 +1353,11 @@ async def on_message(message: discord.Message):
         match_data['winning_team'] = winning_team
         match_data['losing_team'] = losing_team
     except Exception as e:
+        print(f"Match processing error for match {match_id}: {e}")
         await loading_msg.edit(embed=discord.Embed(title="Error", description=f"❌ Error processing match data: {str(e)}", color=discord.Color.red()))
         active_submissions.discard(match_id)
         del pending_upload[message.author.id]
+        print(f"Cleaned up after processing error: active_submissions={active_submissions}, pending_upload={pending_upload}")
         return
 
     guild = message.guild  # Ensure guild is defined for member edits
@@ -1540,6 +1547,7 @@ async def on_message(message: discord.Message):
 
     active_submissions.discard(match_id)
     del pending_upload[message.author.id]
+    print(f"Successfully processed match {match_id}: active_submissions={active_submissions}, pending_upload={pending_upload}")
 
 
     # Channel IDs for results

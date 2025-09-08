@@ -83,10 +83,12 @@ class StaffMatchControls(View):
                 await interaction.response.send_message("Match not found in database.", ephemeral=True)
                 return
 
-            # Revert player stats
+            # Revert player stats and ELO
             for team in ["winning_team", "losing_team"]:
                 for player in match_data[team]:
                     player_name = player["name"]
+                    elo_change = player.get("elo_change", 0)
+                    
                     # Find player in player_data
                     for player_id, data in player_data.items():
                         if data["nick"].lower() == player_name.lower():
@@ -95,6 +97,17 @@ class StaffMatchControls(View):
                                 data["wins"] = max(0, data["wins"] - 1)
                             else:
                                 data["losses"] = max(0, data["losses"] - 1)
+                            
+                            # Revert ELO change
+                            current_elo = data.get("elo", config.DEFAULT_ELO)
+                            new_elo = current_elo - elo_change
+                            data["elo"] = max(config.DEFAULT_ELO, new_elo)
+                            
+                            # Recalculate level based on new ELO
+                            new_level = config.get_level_from_elo(data["elo"])
+                            data["level"] = new_level
+                            
+                            print(f"Reverted {player_name}: ELO {current_elo} -> {data['elo']}, Level -> {new_level}")
                             break
 
             # Save updated player stats
@@ -105,6 +118,15 @@ class StaffMatchControls(View):
             del results[self.match_id]
             with open("results.json", "w") as f:
                 json.dump(results, f, indent=2)
+
+            # Remove from active submissions and pending uploads so it can be submitted again
+            import main
+            main.active_submissions.discard(self.match_id)
+            # Remove from pending_upload if it exists
+            for user_id in list(main.pending_upload.keys()):
+                if main.pending_upload[user_id] == self.match_id:
+                    del main.pending_upload[user_id]
+                    break
 
             # Remove embeds/images from both channels
             await remove_match_embeds(self.bot, self.match_id)
@@ -117,10 +139,10 @@ class StaffMatchControls(View):
             await interaction.response.send_message(
                 f"✅ Match {self.match_id} has been reverted:\n"
                 f"• Removed from results database\n"
-                f"• Player stats updated\n"
+                f"• Player stats and ELO reverted\n"
                 f"• Embeds deleted from results channels\n"
                 f"• Leaderboard refreshed\n"
-                f"The match ID can be submitted again.", 
+                f"• Match ID can be submitted again", 
                 ephemeral=True
             )
         except Exception as e:
@@ -744,10 +766,12 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
             # Use the actual match ID that was found
             match_data = results[actual_match_id]
 
-            # Revert player stats
+            # Revert player stats and ELO
             for team in ["winning_team", "losing_team"]:
                 for player in match_data[team]:
                     player_name = player["name"]
+                    elo_change = player.get("elo_change", 0)
+                    
                     # Find player in player_data
                     for player_id, data in player_data.items():
                         if data["nick"].lower() == player_name.lower():
@@ -756,6 +780,17 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
                                 data["wins"] = max(0, data["wins"] - 1)
                             else:
                                 data["losses"] = max(0, data["losses"] - 1)
+                            
+                            # Revert ELO change
+                            current_elo = data.get("elo", config.DEFAULT_ELO)
+                            new_elo = current_elo - elo_change
+                            data["elo"] = max(config.DEFAULT_ELO, new_elo)
+                            
+                            # Recalculate level based on new ELO
+                            new_level = config.get_level_from_elo(data["elo"])
+                            data["level"] = new_level
+                            
+                            print(f"Reverted {player_name}: ELO {current_elo} -> {data['elo']}, Level -> {new_level}")
                             break
 
             # Save updated player stats
@@ -767,8 +802,17 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
             with open("results.json", "w") as f:
                 json.dump(results, f, indent=2)
 
+            # Remove from active submissions and pending uploads so it can be submitted again
+            import main
+            main.active_submissions.discard(actual_match_id)
+            # Remove from pending_upload if it exists
+            for user_id in list(main.pending_upload.keys()):
+                if main.pending_upload[user_id] == actual_match_id:
+                    del main.pending_upload[user_id]
+                    break
+
             # Remove embeds/images from both channels
-            await remove_match_embeds(self.bot, match_id)
+            await remove_match_embeds(self.bot, actual_match_id)
 
             # Update leaderboard after reverting stats
             leaderboard_updated = False
@@ -784,7 +828,7 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
             success_parts = [
                 f"✅ Match {actual_match_id} has been reverted:",
                 "• Removed from results database",
-                "• Player stats updated", 
+                "• Player stats and ELO reverted", 
                 "• Embeds deleted from results channels"
             ]
             
