@@ -6,7 +6,7 @@
     <title>Scoreboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Teko:wght@300;400;500;600;700&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Orbitron:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         * {
@@ -14,45 +14,24 @@
         }
 
         body {
-            font-family: 'Teko', 'Rajdhani', sans-serif;
-            background: radial-gradient(ellipse at center, #1a1a2e 0%, #16213e 50%, #0f0f23 100%);
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f0f0f 0%, #1a1a1a 50%, #0f0f0f 100%);
             background-attachment: fixed;
         }
 
         #scoreboard-container {
-            background: 
-                linear-gradient(135deg, rgba(255,255,255,0.02) 0%, transparent 50%),
-                linear-gradient(225deg, rgba(0,150,255,0.03) 0%, transparent 30%),
-                linear-gradient(315deg, rgba(255,100,0,0.03) 0%, transparent 30%),
-                radial-gradient(circle at 30% 30%, rgba(100,200,255,0.08) 0%, transparent 50%),
-                radial-gradient(circle at 70% 70%, rgba(255,150,100,0.08) 0%, transparent 50%),
-                linear-gradient(145deg, #1e1e3f 0%, #2a2a4a 20%, #1a1a35 50%, #2d2d48 80%, #1b1b36 100%);
-            border: 1px solid rgba(255,255,255,0.08);
-            box-shadow: 
-                0 25px 50px rgba(0,0,0,0.5),
-                0 0 100px rgba(0,100,200,0.1),
-                inset 0 1px 0 rgba(255,255,255,0.05),
-                inset 0 -1px 0 rgba(0,0,0,0.2);
-            backdrop-filter: blur(10px);
+            background: linear-gradient(145deg, #1a1a1a 0%, #2a2a2a 100%);
+            border: 2px solid #DC143C;
+            border-radius: 16px;
+            box-shadow:
+                0 20px 40px rgba(0,0,0,0.8),
+                0 0 80px rgba(220, 20, 60, 0.15),
+                inset 0 1px 0 rgba(255,255,255,0.08);
             position: relative;
             overflow: hidden;
         }
 
-        #scoreboard-container::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 2px;
-            background: linear-gradient(90deg, transparent, rgba(0,150,255,0.5), rgba(255,100,50,0.5), transparent);
-            animation: shimmer 3s ease-in-out infinite;
-        }
-
-        @keyframes shimmer {
-            0%, 100% { opacity: 0.3; }
-            50% { opacity: 0.8; }
-        }
+        /* No animated top bar to maintain a static premium look */
 
         .score-background-text {
             position: absolute;
@@ -71,52 +50,35 @@
         .score-text {
             position: relative;
             z-index: 1;
-            text-shadow: 
-                0 0 20px rgba(255,255,255,0.3),
-                0 5px 15px rgba(0,0,0,0.8),
-                0 0 40px rgba(100,200,255,0.2);
-            background: linear-gradient(145deg, #ffffff, #e0e8ff);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            font-family: 'Orbitron', monospace;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            color: #ffffff;
+            text-shadow: 0 4px 8px rgba(0,0,0,0.6);
         }
 
         .team-header {
+            font-family: 'Orbitron', monospace;
             text-transform: uppercase;
-            letter-spacing: 4px;
-            font-size: 1.4rem;
-            font-weight: 600;
+            letter-spacing: 2px;
+            font-size: 1.3rem;
+            font-weight: 800;
             padding: 12px 0;
-            position: relative;
-            overflow: hidden;
-            text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+            text-shadow: 0 2px 6px rgba(0,0,0,0.6);
         }
 
-        .team-header::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
-            animation: slide 4s ease-in-out infinite;
-        }
-
-        @keyframes slide {
-            0% { left: -100%; }
-            50% { left: 100%; }
-            100% { left: 100%; }
-        }
+        /* Removed animated stripe for a static header */
 
         .team-header-ct {
-            background: linear-gradient(135deg, #2563eb 0%, #1e40af 50%, #1e3a8a 100%);
+            color: #60a5fa;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(59, 130, 246, 0.1) 100%);
             border-bottom: 2px solid rgba(59, 130, 246, 0.3);
         }
 
         .team-header-t {
-            background: linear-gradient(135deg, #ea580c 0%, #dc2626 50%, #b91c1c 100%);
-            border-bottom: 2px solid rgba(249, 115, 22, 0.3);
+            color: #f87171;
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%);
+            border-bottom: 2px solid rgba(239, 68, 68, 0.3);
         }
 
         .stat-header-grid {
@@ -136,48 +98,23 @@
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 1px;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+            text-shadow: 0 1px 2px rgba(0,0,0,0.6);
         }
 
         .player-row {
             display: grid;
             align-items: center;
             gap: 0.75rem;
-            background: 
-                linear-gradient(135deg, rgba(255,255,255,0.02) 0%, transparent 50%),
-                linear-gradient(90deg, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.4) 100%);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
-            padding: 0.5rem;
-            margin-bottom: 4px;
-            transition: all 0.3s ease;
-            backdrop-filter: blur(5px);
+            background: linear-gradient(90deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.3) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 0.75rem;
+            margin-bottom: 6px;
             position: relative;
             overflow: hidden;
         }
 
-        .player-row::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 20px;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
-            transition: left 0.5s ease;
-        }
-
-        .player-row:hover::before {
-            left: 100%;
-        }
-
-        .player-row:hover {
-            background: 
-                linear-gradient(135deg, rgba(255,255,255,0.05) 0%, transparent 50%),
-                linear-gradient(90deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.5) 100%);
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
-        }
+        /* Removed hover animations for static premium feel */
 
         .player-row-ct {
             grid-template-columns: 3rem minmax(100px, 1fr) repeat(4, 4.5rem);
@@ -191,16 +128,12 @@
         }
 
         .stat-box {
-            background: 
-                linear-gradient(145deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.6) 100%);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 6px;
-            padding: 6px 2px;
-            font-size: 0.95rem;
-            box-shadow: 
-                inset 0 1px 0 rgba(255,255,255,0.05),
-                0 2px 8px rgba(0,0,0,0.3);
-            transition: all 0.3s ease;
+            background: linear-gradient(145deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.6) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 8px;
+            padding: 8px 4px;
+            font-size: 1rem;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
             position: relative;
             overflow: hidden;
         }
@@ -215,12 +148,7 @@
             background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
         }
 
-        .stat-box:hover {
-            background: 
-                linear-gradient(145deg, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.7) 100%);
-            border-color: rgba(255, 255, 255, 0.2);
-            transform: scale(1.05);
-        }
+        /* No hover scaling */
 
         .elo-circle {
             width: 3rem;
@@ -229,11 +157,10 @@
             align-items: center;
             justify-content: center;
             border-radius: 50%;
-            font-size: 1.1rem;
+            font-size: 1.05rem;
             font-weight: 700;
             position: relative;
-            transition: all 0.3s ease;
-            border: 2px solid rgba(255,255,255,0.1);
+            border: 2px solid rgba(255,255,255,0.12);
         }
 
         .elo-circle::before {
@@ -269,50 +196,33 @@
             color: #ffffff;
         }
 
-        .elo-circle:hover {
-            transform: scale(1.1) rotate(5deg);
-            box-shadow: 
-                0 0 30px rgba(34, 197, 94, 0.6),
-                0 8px 25px rgba(0,0,0,0.4);
-        }
+        /* No hover transform for elo circle */
 
         .player-name {
-            text-shadow: 
-                0 0 10px rgba(255,255,255,0.3),
-                0 2px 8px rgba(0,0,0,0.8);
-            background: linear-gradient(135deg, #ffffff, #f1f5f9);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            color: #ffffff;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
             font-weight: 600;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
         }
 
         .match-result-text {
-            font-weight: 700;
+            font-family: 'Orbitron', monospace;
+            font-weight: 800;
             text-transform: uppercase;
-            letter-spacing: 6px;
-            transform: skew(-5deg);
-            text-shadow: 
-                0 0 20px rgba(255,255,255,0.3),
-                0 5px 15px rgba(0,0,0,0.8),
-                0 0 40px rgba(100,200,255,0.2);
-            background: linear-gradient(135deg, #fbbf24, #f59e0b, #d97706);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            letter-spacing: 4px;
+            color: #ffffff;
+            text-shadow: 0 4px 8px rgba(0,0,0,0.6);
         }
 
         .footer-section {
-            background: 
-                linear-gradient(135deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.6) 100%);
-            border-top: 1px solid rgba(255,255,255,0.1);
-            backdrop-filter: blur(10px);
+            background: linear-gradient(135deg, rgba(220, 20, 60, 0.12) 0%, rgba(220, 20, 60, 0.08) 100%);
+            border-top: 2px solid #DC143C;
         }
 
         .map-text {
-            text-shadow: 0 2px 8px rgba(0,0,0,0.8);
-            font-weight: 600;
+            font-family: 'Orbitron', monospace;
+            text-shadow: 0 2px 6px rgba(0,0,0,0.6);
+            font-weight: 700;
             letter-spacing: 2px;
         }
 
