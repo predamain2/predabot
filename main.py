@@ -1804,7 +1804,7 @@ async def on_ready():
             ),
             color=discord.Color.blue()
         )
-        embed.set_footer(text="Already registered? Use /edit_profile to update your information")
+        embed.set_footer(text="Already registered? Use /set_nick and /set_id to update your info")
         await reg_chan.send(embed=embed, view=view)
 
     # post submit results message (NEW)
@@ -2078,10 +2078,7 @@ async def level_info(interaction: discord.Interaction):
         await interaction.followup.send("❌ An error occurred while sending the level information.", ephemeral=True)
         print(f"Error in level_info command: {str(e)}")
 
-@bot.tree.command(name="register", description="Register or update your Standoff2 info")
-async def register(interaction: discord.Interaction):
-    # Registration result will be ephemeral by default from the modal
-    await interaction.response.send_modal(RegisterModal())
+# Removed deprecated /register slash command in favor of Register button only
 
 class EditProfileModal(discord.ui.Modal, title="Edit Profile"):
     nick = discord.ui.TextInput(label="New Nickname", placeholder="Enter your new in-game nickname")
@@ -2187,9 +2184,53 @@ async def sync_nicknames(interaction: discord.Interaction):
         ephemeral=True
     )
 
-@bot.tree.command(name="edit_profile", description="Edit your nickname and Standoff2 ID")
-async def edit_profile(interaction: discord.Interaction):
-    await interaction.response.send_modal(EditProfileModal())
+# Split edit_profile into two explicit commands
+@bot.tree.command(name="set_nick", description="Set your registered nickname")
+@discord.app_commands.describe(nick="Your new in-game nickname")
+async def set_nick(interaction: discord.Interaction, nick: str):
+    await interaction.response.defer(ephemeral=True)
+    key = str(interaction.user.id)
+    pdata = player_data.get(key)
+    if not pdata:
+        await interaction.followup.send('❌ You are not registered. Use the Register button to sign up first.', ephemeral=True)
+        return
+    clean_nick = nick.strip()
+    # Duplicate check
+    for k, v in player_data.items():
+        if v.get('nick', '').lower() == clean_nick.lower() and k != key:
+            await interaction.followup.send('❌ That nickname is already registered by another user.', ephemeral=True)
+            return
+    pdata['nick'] = clean_nick
+    save_players()
+    # Update Discord nickname where possible
+    member = interaction.user
+    if interaction.guild and not member.guild_permissions.administrator:
+        try:
+            await member.edit(nick=clean_nick)
+        except Exception:
+            pass
+    await interaction.followup.send(f"✅ Nickname updated to **{clean_nick}**.", ephemeral=True)
+
+@bot.tree.command(name="set_id", description="Set your registered Standoff 2 ID")
+@discord.app_commands.describe(pid="Your Standoff 2 numeric ID")
+async def set_id(interaction: discord.Interaction, pid: str):
+    await interaction.response.defer(ephemeral=True)
+    key = str(interaction.user.id)
+    pdata = player_data.get(key)
+    if not pdata:
+        await interaction.followup.send('❌ You are not registered. Use the Register button to sign up first.', ephemeral=True)
+        return
+    if not pid.isdigit():
+        await interaction.followup.send('❌ Player ID must contain only numbers.', ephemeral=True)
+        return
+    # Duplicate check
+    for k, v in player_data.items():
+        if v.get('id') == pid and k != key:
+            await interaction.followup.send('❌ That ID is already registered by another user.', ephemeral=True)
+            return
+    pdata['id'] = pid
+    save_players()
+    await interaction.followup.send(f"✅ Player ID updated to `{pid}`.", ephemeral=True)
 
 # Initialize Jinja2 environment
 env = Environment(loader=FileSystemLoader('.'))
