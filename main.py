@@ -262,6 +262,41 @@ async def render_html_to_image(match_data, output_path, html_template='scoreboar
                     print(f"Error calculating rating for player {player.get('name')}: {e}")
                     player['rating'] = "0.00"
     
+    # Ensure each player's level is present and correct for icon rendering
+    try:
+        name_to_player = {v.get("nick", "").lower(): v for v in player_data.values()}
+    except Exception:
+        name_to_player = {}
+    for team in ['ct_team', 't_team']:
+        if team in match_data:
+            for player in match_data[team]:
+                try:
+                    # Respect provided numeric level if present
+                    raw_level = str(player.get('level', '')).strip()
+                    if raw_level != '':
+                        player['level'] = int(raw_level)
+                        continue
+                except Exception:
+                    pass
+                # Prefer stored player_data (by nickname), compute from ELO
+                pd = name_to_player.get(str(player.get('name', '')).lower())
+                if pd:
+                    try:
+                        elo_value = int(pd.get('elo', config.DEFAULT_ELO))
+                        player['level'] = int(config.get_level_from_elo(elo_value))
+                        continue
+                    except Exception:
+                        pass
+                # Fallback: compute from snapshot ELO on the player if present
+                if 'elo' in player and str(player['elo']).strip() != '':
+                    try:
+                        player['level'] = int(config.get_level_from_elo(int(player['elo'])))
+                        continue
+                    except Exception:
+                        pass
+                # Default
+                player['level'] = 1
+
     # First save the match_data to HTML file
     with open(html_template, 'r', encoding='utf-8') as f:
         template_content = f.read()
