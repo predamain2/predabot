@@ -123,8 +123,8 @@ class StaffMatchControls(View):
             import main
             main.active_submissions.discard(self.match_id)
             # Remove from pending_upload if it exists
-            for user_id in list(main.pending_upload.keys()):
-                if main.pending_upload[user_id] == self.match_id:
+            for user_id, data in list(main.pending_upload.items()):
+                if data.get('match_id') == self.match_id:
                     del main.pending_upload[user_id]
                     break
 
@@ -405,12 +405,12 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
             print(f"DEBUG - pending_upload: {pending_upload}")
             print(f"DEBUG - active_submissions type: {type(active_submissions)}")
             print(f"DEBUG - pending_upload type: {type(pending_upload)}")
-            print(f"DEBUG - active_submissions length: {len(active_submissions) if active_submissions else 'None'}")
-            print(f"DEBUG - pending_upload length: {len(pending_upload) if pending_upload else 'None'}")
+            print(f"DEBUG - active_submissions length: {len(active_submissions)}")
+            print(f"DEBUG - pending_upload length: {len(pending_upload)}")
             
             # Check if both are empty
-            has_active = active_submissions and len(active_submissions) > 0
-            has_pending = pending_upload and len(pending_upload) > 0
+            has_active = len(active_submissions) > 0
+            has_pending = len(pending_upload) > 0
             
             print(f"DEBUG - has_active: {has_active}, has_pending: {has_pending}")
             
@@ -601,7 +601,7 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
             active_submissions.add(match_id)
             
             # Add to pending upload
-            pending_upload[str(interaction.user.id)] = {
+            pending_upload[interaction.user.id] = {
                 "channel_id": interaction.channel.id,
                 "match_id": match_id,
                 "started_at": time.time()
@@ -806,8 +806,8 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
             import main
             main.active_submissions.discard(actual_match_id)
             # Remove from pending_upload if it exists
-            for user_id in list(main.pending_upload.keys()):
-                if main.pending_upload[user_id] == actual_match_id:
+            for user_id, data in list(main.pending_upload.items()):
+                if data.get('match_id') == actual_match_id:
                     del main.pending_upload[user_id]
                     break
 

@@ -3,6 +3,7 @@ import discord
 from discord.ext import commands
 from discord.ui import View, Select, Button
 import asyncio, random, uuid, json, pathlib, re, time
+import sys
 from datetime import datetime, timedelta
 
 # ---------- Intents & Bot ----------
@@ -11,6 +12,9 @@ intents.members = True            # privileged; enable in Dev Portal
 intents.presences = False
 intents.message_content = True
 intents.voice_states = True
+
+# Ensure that other modules importing 'main' get this running module instance (avoid double-import when run as __main__)
+sys.modules['main'] = sys.modules.get(__name__)
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
