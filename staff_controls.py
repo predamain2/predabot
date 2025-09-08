@@ -121,6 +121,11 @@ class StaffMatchControls(View):
 
             # Remove from active submissions and pending uploads so it can be submitted again
             import main
+            # Also clear in-memory results so duplicate checks allow resubmission
+            try:
+                main.results_data.pop(self.match_id, None)
+            except Exception:
+                pass
             main.active_submissions.discard(self.match_id)
             # Remove from pending_upload if it exists
             for user_id, data in list(main.pending_upload.items()):
@@ -225,7 +230,7 @@ async def repost_game_results(bot, guild, match_id, match_data):
         async for message in channel.history(limit=100):
             if message.embeds:
                 emb = message.embeds[0]
-                if emb.description and f"Match ID: `{match_id}`" in emb.description:
+                if emb.description and f"`{match_id}`" in emb.description:
                     try:
                         await message.delete()
                     except Exception:
@@ -283,7 +288,7 @@ async def remove_match_embeds(bot, match_id):
             async for message in channel.history(limit=100):
                 if message.embeds:
                     embed = message.embeds[0]
-                    if embed.description and f"Match ID: `{match_id}`" in embed.description:
+                    if embed.description and f"`{match_id}`" in embed.description:
                         try:
                             await message.delete()
                         except Exception as e:
@@ -309,7 +314,7 @@ async def update_match_embeds(bot, match_id, match_data):
             async for message in channel.history(limit=100):
                 if message.embeds:
                     embed = message.embeds[0]
-                    if embed.description and f"Match ID: `{match_id}`" in embed.description:
+                    if embed.description and f"`{match_id}`" in embed.description:
                         # Update the embed
                         new_embed = create_updated_embed(match_data, player_data, match_id)
                         await message.edit(embed=new_embed)
@@ -804,6 +809,11 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
 
             # Remove from active submissions and pending uploads so it can be submitted again
             import main
+            # Also clear in-memory results so duplicate checks allow resubmission
+            try:
+                main.results_data.pop(actual_match_id, None)
+            except Exception:
+                pass
             main.active_submissions.discard(actual_match_id)
             # Remove from pending_upload if it exists
             for user_id, data in list(main.pending_upload.items()):
