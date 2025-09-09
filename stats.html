@@ -339,7 +339,7 @@
 		/* Map cards with images */
 		.map-grid {
 			display: grid;
-			grid-template-columns: repeat(3, 1fr);
+			grid-template-columns: repeat(4, 1fr);
 			gap: 12px;
 		}
 
@@ -569,7 +569,7 @@
 			}
 			
 			.map-grid {
-				grid-template-columns: repeat(2, 1fr);
+				grid-template-columns: repeat(3, 1fr);
 			}
 		}
 
@@ -589,7 +589,7 @@
 			}
 			
 			.map-grid {
-				grid-template-columns: 1fr;
+				grid-template-columns: repeat(2, 1fr);
 			}
 			
 			.matches-grid {
@@ -710,14 +710,7 @@
 						</div>
 					</div>
 					<div class="map-grid">
-						{% for m in stats.maps or [
-							{'name': 'Dune', 'wins': 2, 'losses': 0, 'kd': '1.53', 'win_rate': '100'},
-							{'name': 'Sandstone', 'wins': 0, 'losses': 0, 'kd': '0', 'win_rate': '0'},
-							{'name': 'Rust', 'wins': 1, 'losses': 1, 'kd': '1.44', 'win_rate': '50'},
-							{'name': 'Province', 'wins': 1, 'losses': 1, 'kd': '1.52', 'win_rate': '50'},
-							{'name': 'Zone 7', 'wins': 1, 'losses': 1, 'kd': '1.62', 'win_rate': '50'},
-							{'name': 'Hanami', 'wins': 0, 'losses': 0, 'kd': '0', 'win_rate': '0'}
-						] %}
+						{% for m in stats.maps %}
 						<div class="map-card">
 							<div class="map-header">
 								<div class="map-icon"></div>
