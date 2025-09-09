@@ -106,6 +106,16 @@ def staff_mod_owner_only():
             return interaction.user.guild_permissions.administrator
         return any(getattr(r, 'id', 0) in role_ids for r in getattr(interaction.user, 'roles', []))
     return discord.app_commands.check(predicate)
+
+def owner_only():
+    """Slash-command check: allow only users with Owner role configured in config.py"""
+    async def predicate(interaction: discord.Interaction) -> bool:
+        owner_role_id = int(getattr(config, 'OWNER_ROLE_ID', 0) or 0)
+        if owner_role_id == 0:
+            # If not configured, fall back to guild owner only
+            return interaction.user.id == interaction.guild.owner_id
+        return any(getattr(r, 'id', 0) == owner_role_id for r in getattr(interaction.user, 'roles', []))
+    return discord.app_commands.check(predicate)
 def is_player_timed_out(user_id):
     """Check if a player is currently timed out"""
     current_time = time.time()
