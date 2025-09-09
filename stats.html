@@ -22,118 +22,106 @@
 			font-family: 'Inter', sans-serif;
 			min-height: 100vh;
 			display: flex;
-			align-items: center;
+			align-items: flex-start;
 			justify-content: center;
 			padding: 20px;
 		}
 
+		/* Complete redesign to match reference image with comprehensive layout */
 		.dashboard {
 			width: 100%;
-			max-width: 1200px;
+			max-width: 1400px;
 			display: grid;
 			grid-template-columns: 2fr 1fr;
-			gap: 16px;
+			gap: 20px;
 		}
 
 		.card {
-			background: linear-gradient(145deg, #151519 0%, #0f0f12 100%);
+			background: linear-gradient(145deg, #1a1a1f 0%, #0f0f12 100%);
 			border: 1px solid rgba(255,255,255,0.08);
 			border-radius: 12px;
-			box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+			box-shadow: 0 8px 32px rgba(0,0,0,0.6);
 		}
 
-		/* Optimized header layout to be more compact */
+		/* Header with clan tag and improved layout */
 		.header {
 			grid-column: 1 / -1;
-			padding: 16px 20px;
+			padding: 20px 24px;
 			display: flex;
 			align-items: center;
-			gap: 16px;
+			gap: 20px;
 		}
 
 		.avatar { 
-			width: 64px; 
-			height: 64px; 
-			border-radius: 10px; 
-			border: 1px solid rgba(255,255,255,0.1); 
+			width: 80px; 
+			height: 80px; 
+			border-radius: 12px; 
+			border: 2px solid rgba(255,255,255,0.1); 
 			object-fit: cover; 
 			flex-shrink: 0;
 		}
 
 		.player-info {
 			flex: 1;
-			min-width: 0;
 		}
 
 		.player-name {
 			display: flex;
 			align-items: center;
-			gap: 8px;
-			margin-bottom: 4px;
+			gap: 12px;
+			margin-bottom: 6px;
+		}
+
+		.clan-tag {
+			color: rgba(255,255,255,0.6);
+			font-weight: 400;
 		}
 
 		.player-name h1 {
-			font-size: 22px;
+			font-size: 28px;
 			font-weight: 800;
 			margin: 0;
 		}
 
-		.level-badge { 
-			width: 18px; 
-			height: 18px; 
-		}
-
 		.player-id {
-			font-size: 11px;
+			font-size: 12px;
 			color: rgba(255,255,255,0.6);
-			text-transform: uppercase;
-			letter-spacing: 0.5px;
 		}
 
-		.points-display {
-			text-align: right;
-			flex-shrink: 0;
-		}
-
-		.points-label {
-			font-size: 10px;
-			color: rgba(255,255,255,0.6);
-			text-transform: uppercase;
-			letter-spacing: 1px;
-			margin-bottom: 4px;
-		}
-
-		.points-value {
-			font-size: 24px;
-			font-weight: 800;
-			font-family: 'Orbitron', monospace;
-		}
-
-		/* Improved main content layout */
-		.main-content {
+		/* Left column layout */
+		.left-column {
 			display: flex;
 			flex-direction: column;
-			gap: 16px;
+			gap: 20px;
 		}
 
 		.section {
-			padding: 16px;
+			padding: 20px;
 		}
 
 		.section-title {
 			font-weight: 700;
-			font-size: 12px;
+			font-size: 14px;
 			letter-spacing: 1px;
 			color: rgba(255,255,255,0.7);
 			text-transform: uppercase;
-			margin-bottom: 16px;
+			margin-bottom: 20px;
+			display: flex;
+			align-items: center;
+			gap: 8px;
 		}
 
-		/* Optimized statistics section layout */
-		.stats-grid {
+		.section-icon {
+			width: 16px;
+			height: 16px;
+			opacity: 0.7;
+		}
+
+		/* Enhanced statistics section */
+		.stats-layout {
 			display: grid;
 			grid-template-columns: auto 1fr;
-			gap: 20px;
+			gap: 24px;
 			align-items: start;
 		}
 
@@ -145,8 +133,8 @@
 		}
 
 		.kd-circle {
-			width: 140px;
-			height: 140px;
+			width: 160px;
+			height: 160px;
 			border-radius: 50%;
 			background: radial-gradient(closest-side, #0f0f12 70%, transparent 72% 100%),
 				conic-gradient(from 180deg, #3b82f6 calc(var(--killsP, 50) * 1%), #ef4444 0);
@@ -159,20 +147,28 @@
 		.kd-circle::before {
 			content: '';
 			position: absolute;
-			inset: 8px;
+			inset: 10px;
 			border-radius: 50%;
-			background: linear-gradient(145deg, #17171b, #101015);
+			background: linear-gradient(145deg, #1a1a1f, #0f0f12);
 		}
 
 		.kd-value {
 			position: relative;
 			font-family: 'Orbitron', monospace;
-			font-size: 24px;
+			font-size: 32px;
 			font-weight: 800;
 			z-index: 1;
 		}
 
-		.kd-stats {
+		.kd-label {
+			font-size: 11px;
+			color: rgba(255,255,255,0.6);
+			text-transform: uppercase;
+			letter-spacing: 1px;
+			margin-top: 4px;
+		}
+
+		.kd-breakdown {
 			display: flex;
 			gap: 8px;
 		}
@@ -180,14 +176,13 @@
 		.kd-stat {
 			background: rgba(255,255,255,0.04);
 			border: 1px solid rgba(255,255,255,0.08);
-			border-radius: 6px;
-			padding: 6px 10px;
+			border-radius: 8px;
+			padding: 8px 12px;
 			text-align: center;
-			min-width: 50px;
 		}
 
 		.kd-stat-label {
-			font-size: 9px;
+			font-size: 10px;
 			color: rgba(255,255,255,0.6);
 			text-transform: uppercase;
 			letter-spacing: 0.5px;
@@ -195,25 +190,37 @@
 
 		.kd-stat-value {
 			font-weight: 800;
-			font-size: 14px;
+			font-size: 16px;
 			margin-top: 2px;
 		}
 
-		.performance-stats {
+		.kd-stat.kills .kd-stat-value { color: #3b82f6; }
+		.kd-stat.deaths .kd-stat-value { color: #ef4444; }
+
+		/* Comprehensive stats grid */
+		.performance-grid {
 			display: grid;
-			grid-template-columns: 1fr 1fr;
+			grid-template-columns: repeat(3, 1fr);
 			gap: 12px;
 		}
 
 		.stat-card {
 			background: rgba(255,255,255,0.03);
 			border: 1px solid rgba(255,255,255,0.08);
-			border-radius: 8px;
-			padding: 12px;
+			border-radius: 10px;
+			padding: 16px;
+			position: relative;
+		}
+
+		.stat-header {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			margin-bottom: 8px;
 		}
 
 		.stat-label {
-			font-size: 10px;
+			font-size: 11px;
 			color: rgba(255,255,255,0.6);
 			text-transform: uppercase;
 			letter-spacing: 0.5px;
@@ -221,14 +228,14 @@
 
 		.stat-value {
 			font-family: 'Orbitron', monospace;
-			font-size: 18px;
+			font-size: 24px;
 			font-weight: 800;
-			margin: 4px 0;
+			margin: 8px 0;
 		}
 
 		.stat-bar {
-			height: 4px;
-			border-radius: 2px;
+			height: 6px;
+			border-radius: 3px;
 			background: rgba(255,255,255,0.08);
 			position: relative;
 			overflow: hidden;
@@ -241,27 +248,38 @@
 			top: 0;
 			bottom: 0;
 			width: var(--progress, 0%);
-			background: linear-gradient(90deg, #ff2d55, #7c3aed);
+			background: linear-gradient(90deg, #3b82f6, #7c3aed);
 		}
 
-		/* Improved map statistics layout */
-		.map-stats {
+		.stat-rating {
+			font-size: 10px;
+			font-weight: 600;
+			padding: 2px 6px;
+			border-radius: 4px;
+			text-transform: uppercase;
+		}
+
+		.stat-rating.strong { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+		.stat-rating.low { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+		.stat-rating.stable { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+
+		/* Enhanced map statistics */
+		.map-section {
 			display: grid;
 			grid-template-columns: auto 1fr;
-			gap: 16px;
-			align-items: start;
+			gap: 20px;
 		}
 
 		.winrate-display {
 			display: flex;
 			flex-direction: column;
 			align-items: center;
-			gap: 8px;
+			gap: 12px;
 		}
 
 		.winrate-circle {
-			width: 100px;
-			height: 100px;
+			width: 120px;
+			height: 120px;
 			border-radius: 50%;
 			background: radial-gradient(closest-side, #0f0f12 70%, transparent 72% 100%),
 				conic-gradient(#7c3aed calc(var(--winrate, 0) * 1%), rgba(255,255,255,0.08) 0);
@@ -276,34 +294,33 @@
 			position: absolute;
 			inset: 8px;
 			border-radius: 50%;
-			background: linear-gradient(145deg, #17171b, #101015);
+			background: linear-gradient(145deg, #1a1a1f, #0f0f12);
 		}
 
 		.winrate-value {
 			position: relative;
 			font-family: 'Orbitron', monospace;
-			font-size: 18px;
+			font-size: 20px;
 			font-weight: 800;
 			z-index: 1;
 		}
 
 		.winrate-label {
-			font-size: 9px;
+			font-size: 10px;
 			color: rgba(255,255,255,0.6);
 			text-transform: uppercase;
 			letter-spacing: 1px;
 		}
 
-		.wl-stats {
+		.wl-breakdown {
 			display: flex;
-			gap: 6px;
-			margin-top: 4px;
+			gap: 8px;
 		}
 
 		.wl-stat {
-			padding: 4px 8px;
-			border-radius: 4px;
-			font-size: 11px;
+			padding: 6px 10px;
+			border-radius: 6px;
+			font-size: 12px;
 			font-weight: 700;
 		}
 
@@ -319,51 +336,207 @@
 			border: 1px solid rgba(239,68,68,0.3);
 		}
 
-		.map-cards {
+		/* Map cards with images */
+		.map-grid {
 			display: grid;
-			grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-			gap: 10px;
+			grid-template-columns: repeat(3, 1fr);
+			gap: 12px;
 		}
 
 		.map-card {
 			background: rgba(255,255,255,0.03);
 			border: 1px solid rgba(255,255,255,0.08);
-			border-radius: 8px;
-			padding: 10px;
+			border-radius: 10px;
+			padding: 12px;
+			position: relative;
+		}
+
+		.map-header {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			margin-bottom: 8px;
+		}
+
+		.map-icon {
+			width: 24px;
+			height: 24px;
+			border-radius: 4px;
+			background: rgba(255,255,255,0.1);
 		}
 
 		.map-name {
 			font-weight: 700;
 			font-size: 13px;
+		}
+
+		.map-record {
+			display: flex;
+			gap: 4px;
 			margin-bottom: 4px;
 		}
 
-		.map-stats-text {
+		.map-w, .map-l {
+			padding: 2px 6px;
+			border-radius: 4px;
 			font-size: 10px;
+			font-weight: 600;
+		}
+
+		.map-w { background: rgba(34,197,94,0.15); color: #34d399; }
+		.map-l { background: rgba(239,68,68,0.15); color: #f87171; }
+
+		.map-stats-text {
+			font-size: 11px;
 			color: rgba(255,255,255,0.7);
 		}
 
-		/* Optimized sidebar layout */
-		.sidebar {
+		/* Right sidebar enhancements */
+		.right-sidebar {
 			display: flex;
 			flex-direction: column;
-			gap: 16px;
+			gap: 20px;
 		}
 
-		.recent-matches {
-			display: grid;
-			grid-template-columns: repeat(5, 1fr);
-			gap: 6px;
+		.level-section {
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			margin-bottom: 16px;
 		}
 
-		.match-result {
-			height: 24px;
-			border-radius: 4px;
+		.level-badge {
+			width: 32px;
+			height: 32px;
+			background: linear-gradient(135deg, #fbbf24, #f59e0b);
+			border-radius: 8px;
 			display: flex;
 			align-items: center;
 			justify-content: center;
 			font-weight: 800;
-			font-size: 11px;
+			color: #000;
+		}
+
+		.level-info h3 {
+			font-size: 16px;
+			margin-bottom: 2px;
+		}
+
+		.level-progress {
+			height: 6px;
+			background: rgba(255,255,255,0.08);
+			border-radius: 3px;
+			overflow: hidden;
+		}
+
+		.level-progress-bar {
+			height: 100%;
+			background: linear-gradient(90deg, #fbbf24, #f59e0b);
+			width: var(--level-progress, 0%);
+		}
+
+		.info-grid {
+			display: grid;
+			grid-template-columns: repeat(2, 1fr);
+			gap: 12px;
+			margin-bottom: 16px;
+		}
+
+		.info-item {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+		}
+
+		.info-icon {
+			width: 16px;
+			height: 16px;
+			opacity: 0.6;
+		}
+
+		.info-text {
+			font-size: 12px;
+		}
+
+		.info-label {
+			color: rgba(255,255,255,0.6);
+		}
+
+		.info-value {
+			font-weight: 600;
+		}
+
+		/* League and leaderboard */
+		.league-section {
+			margin-bottom: 16px;
+		}
+
+		.league-header {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			margin-bottom: 8px;
+		}
+
+		.league-name {
+			font-weight: 600;
+			font-size: 14px;
+		}
+
+		.league-badge {
+			width: 24px;
+			height: 24px;
+			background: rgba(255,255,255,0.1);
+			border-radius: 4px;
+		}
+
+		.leaderboard {
+			margin-bottom: 16px;
+		}
+
+		.leaderboard-item {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			padding: 6px 0;
+			border-bottom: 1px solid rgba(255,255,255,0.05);
+		}
+
+		.rank-number {
+			font-weight: 800;
+			font-size: 12px;
+			color: rgba(255,255,255,0.6);
+			width: 20px;
+		}
+
+		.player-avatar {
+			width: 20px;
+			height: 20px;
+			border-radius: 4px;
+			background: rgba(255,255,255,0.1);
+		}
+
+		.player-name-small {
+			font-size: 12px;
+			font-weight: 500;
+		}
+
+		/* Recent matches enhanced */
+		.matches-grid {
+			display: grid;
+			grid-template-columns: repeat(7, 1fr);
+			gap: 6px;
+			margin-bottom: 12px;
+		}
+
+		.match-result {
+			height: 28px;
+			border-radius: 6px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			font-weight: 800;
+			font-size: 12px;
 		}
 
 		.match-result.win {
@@ -378,115 +551,184 @@
 			border: 1px solid rgba(239,68,68,0.3);
 		}
 
-		/* Responsive design improvements */
-		@media (max-width: 1024px) {
+		.matches-overflow {
+			display: grid;
+			grid-template-columns: repeat(3, 1fr);
+			gap: 6px;
+		}
+
+		/* Responsive design */
+		@media (max-width: 1200px) {
 			.dashboard {
 				grid-template-columns: 1fr;
-				max-width: 800px;
+				max-width: 900px;
 			}
 			
-			.header {
-				flex-direction: column;
-				text-align: center;
-				gap: 12px;
+			.performance-grid {
+				grid-template-columns: repeat(2, 1fr);
 			}
 			
-			.points-display {
-				text-align: center;
+			.map-grid {
+				grid-template-columns: repeat(2, 1fr);
 			}
 		}
 
 		@media (max-width: 768px) {
-			.stats-grid {
+			.stats-layout {
 				grid-template-columns: 1fr;
 				gap: 16px;
 			}
 			
-			.map-stats {
+			.map-section {
 				grid-template-columns: 1fr;
-				gap: 12px;
+				gap: 16px;
 			}
 			
-			.kd-circle {
-				width: 120px;
-				height: 120px;
+			.performance-grid {
+				grid-template-columns: 1fr;
 			}
 			
-			.recent-matches {
-				grid-template-columns: repeat(10, 1fr);
+			.map-grid {
+				grid-template-columns: 1fr;
+			}
+			
+			.matches-grid {
+				grid-template-columns: repeat(5, 1fr);
 			}
 		}
 	</style>
 </head>
 <body>
 	<div class="dashboard">
+		<!-- Enhanced header with clan tag support -->
 		<div class="card header">
 			<img class="avatar" src="{{ stats.avatar_url|default('', true) }}" alt="Player Avatar">
 			<div class="player-info">
 				<div class="player-name">
-					<h1>{{ stats.name|default('Player', true) }}</h1>
-					<img class="level-badge" src="level_icons/{{ stats.level or 1 }}.png" alt="Level {{ stats.level or 1 }}">
+					<h1><span class="clan-tag">#{{ stats.clan_tag|default('???', true) }}</span> {{ stats.name|default('Player', true) }}</h1>
 				</div>
 				<div class="player-id">ID: {{ stats.player_id|default('-', true) }}</div>
 			</div>
-			<div class="points-display">
-				<div class="points-label">Points</div>
-				<div class="points-value">{{ stats.points|default(0, true) }}</div>
-			</div>
 		</div>
 
-		<div class="main-content">
+		<div class="left-column">
+			<!-- Enhanced statistics section -->
 			<div class="card section">
-				<div class="section-title">Statistics</div>
-				<div class="stats-grid">
+				<div class="section-title">
+					<svg class="section-icon" viewBox="0 0 24 24" fill="currentColor">
+						<path d="M3 3v18h18v-2H5V3H3zm4 14h2v-6H7v6zm4 0h2V9h-2v8zm4 0h2v-4h-2v4z"/>
+					</svg>
+					Statistic
+				</div>
+				<div class="stats-layout">
 					<div class="kd-display">
 						<div class="kd-circle" style="--killsP: {{ (stats.kills / (stats.kills + stats.deaths) * 100) if (stats.kills + stats.deaths) > 0 else 0 }}">
-							<div class="kd-value">{{ stats.kd|default('0.0', true) }}</div>
+							<div class="kd-value">{{ stats.kd|default('0.00', true) }}</div>
 						</div>
-						<div class="kd-stats">
-							<div class="kd-stat">
-								<div class="kd-stat-label">Kills</div>
+						<div class="kd-label">Kill/Deaths</div>
+						<div class="kd-breakdown">
+							<div class="kd-stat kills">
+								<div class="kd-stat-label">K</div>
 								<div class="kd-stat-value">{{ stats.kills|default(0, true) }}</div>
 							</div>
-							<div class="kd-stat">
-								<div class="kd-stat-label">Deaths</div>
+							<div class="kd-stat deaths">
+								<div class="kd-stat-label">D</div>
 								<div class="kd-stat-value">{{ stats.deaths|default(0, true) }}</div>
 							</div>
 						</div>
 					</div>
-					<div class="performance-stats">
+					<div class="performance-grid">
 						<div class="stat-card">
-							<div class="stat-label">AVG</div>
-							<div class="stat-value">{{ stats.avg|default('—', true) }}</div>
-							<div class="stat-bar" style="--progress: {{ (stats.avg or 0) * 5 }}%"></div>
+							<div class="stat-header">
+								<div class="stat-label">Rating</div>
+								<div class="stat-rating strong">Strong</div>
+							</div>
+							<div class="stat-value">{{ stats.rating|default('1.13', true) }}</div>
+							<div class="stat-bar" style="--progress: {{ (stats.rating or 1.13) * 50 }}%"></div>
 						</div>
 						<div class="stat-card">
-							<div class="stat-label">Assists</div>
-							<div class="stat-value">{{ stats.assists|default(0, true) }}</div>
-							<div class="stat-bar" style="--progress: {{ (stats.assists or 0) % 100 }}%"></div>
+							<div class="stat-header">
+								<div class="stat-label">AVG</div>
+								<div class="stat-rating strong">Strong</div>
+							</div>
+							<div class="stat-value">{{ stats.avg|default('18', true) }}</div>
+							<div class="stat-bar" style="--progress: {{ (stats.avg or 18) * 4 }}%"></div>
+						</div>
+						<div class="stat-card">
+							<div class="stat-header">
+								<div class="stat-label">Impact</div>
+								<div class="stat-rating strong">Strong</div>
+							</div>
+							<div class="stat-value">{{ stats.impact|default('1.21', true) }}</div>
+							<div class="stat-bar" style="--progress: {{ (stats.impact or 1.21) * 60 }}%"></div>
+						</div>
+						<div class="stat-card">
+							<div class="stat-header">
+								<div class="stat-label">KPR</div>
+								<div class="stat-rating strong">Strong</div>
+							</div>
+							<div class="stat-value">{{ stats.kpr|default('0.92', true) }}</div>
+							<div class="stat-bar" style="--progress: {{ (stats.kpr or 0.92) * 80 }}%"></div>
+						</div>
+						<div class="stat-card">
+							<div class="stat-header">
+								<div class="stat-label">Assists</div>
+								<div class="stat-rating low">Low</div>
+							</div>
+							<div class="stat-value">{{ stats.assists|default('29', true) }}</div>
+							<div class="stat-bar" style="--progress: {{ (stats.assists or 29) * 2 }}%"></div>
+						</div>
+						<div class="stat-card">
+							<div class="stat-header">
+								<div class="stat-label">SVR</div>
+								<div class="stat-rating stable">Stable</div>
+							</div>
+							<div class="stat-value">{{ stats.svr|default('0.32', true) }}</div>
+							<div class="stat-bar" style="--progress: {{ (stats.svr or 0.32) * 100 }}%"></div>
 						</div>
 					</div>
 				</div>
 			</div>
 
+			<!-- Enhanced map statistics -->
 			<div class="card section">
-				<div class="section-title">Map Statistics</div>
-				<div class="map-stats">
+				<div class="section-title">
+					<svg class="section-icon" viewBox="0 0 24 24" fill="currentColor">
+						<path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM10 5.47l4 1.4v11.66l-4-1.4V5.47z"/>
+					</svg>
+					Map Statistic
+				</div>
+				<div class="map-section">
 					<div class="winrate-display">
-						<div class="winrate-circle" style="--winrate: {{ stats.win_rate or 0 }}">
-							<div class="winrate-value">{{ stats.win_rate|default(0, true) }}%</div>
+						<div class="winrate-circle" style="--winrate: {{ stats.win_rate or 50 }}">
+							<div class="winrate-value">{{ stats.win_rate|default('50', true) }}%</div>
 						</div>
 						<div class="winrate-label">Win Rate</div>
-						<div class="wl-stats">
-							<div class="wl-stat wins">W {{ stats.wins|default(0, true) }}</div>
-							<div class="wl-stat losses">L {{ stats.losses|default(0, true) }}</div>
+						<div class="wl-breakdown">
+							<div class="wl-stat wins">W {{ stats.wins|default('5', true) }}</div>
+							<div class="wl-stat losses">L {{ stats.losses|default('5', true) }}</div>
 						</div>
 					</div>
-					<div class="map-cards">
-						{% for m in stats.maps or [] %}
+					<div class="map-grid">
+						{% for m in stats.maps or [
+							{'name': 'Dune', 'wins': 2, 'losses': 0, 'kd': '1.53', 'win_rate': '100'},
+							{'name': 'Sandstone', 'wins': 0, 'losses': 0, 'kd': '0', 'win_rate': '0'},
+							{'name': 'Rust', 'wins': 1, 'losses': 1, 'kd': '1.44', 'win_rate': '50'},
+							{'name': 'Province', 'wins': 1, 'losses': 1, 'kd': '1.52', 'win_rate': '50'},
+							{'name': 'Zone 7', 'wins': 1, 'losses': 1, 'kd': '1.62', 'win_rate': '50'},
+							{'name': 'Hanami', 'wins': 0, 'losses': 0, 'kd': '0', 'win_rate': '0'}
+						] %}
 						<div class="map-card">
-							<div class="map-name">{{ m.name }}</div>
-							<div class="map-stats-text">K/D {{ m.kd|default('—', true) }} • W/R {{ m.win_rate|default('—', true) }}%</div>
+							<div class="map-header">
+								<div class="map-icon"></div>
+								<div class="map-name">{{ m.name }}</div>
+							</div>
+							<div class="map-record">
+								<div class="map-w">W = {{ m.wins|default(0, true) }}</div>
+								<div class="map-l">L = {{ m.losses|default(0, true) }}</div>
+							</div>
+							<div class="map-stats-text">K/D = {{ m.kd|default('0', true) }}</div>
+							<div class="map-stats-text">W/R = {{ m.win_rate|default('0', true) }}%</div>
 						</div>
 						{% endfor %}
 					</div>
@@ -494,14 +736,102 @@
 			</div>
 		</div>
 
-		<div class="sidebar">
+		<div class="right-sidebar">
+			<!-- Level and player info -->
 			<div class="card section">
-				<div class="section-title">Recent Matches</div>
-				<div class="recent-matches">
-					{% for r in stats.recent or [] %}
+				<div class="level-section">
+					<div class="level-badge">{{ stats.level|default('1', true) }}</div>
+					<div class="level-info">
+						<h3>Level {{ stats.level|default('1', true) }}</h3>
+						<div class="level-progress">
+							<div class="level-progress-bar" style="--level-progress: {{ stats.level_progress|default('75', true) }}%"></div>
+						</div>
+					</div>
+				</div>
+				
+				<div class="info-grid">
+					<div class="info-item">
+						<svg class="info-icon" viewBox="0 0 24 24" fill="currentColor">
+							<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+						</svg>
+						<div class="info-text">
+							<div class="info-label">Playtime</div>
+							<div class="info-value">{{ stats.playtime|default('0h', true) }}</div>
+						</div>
+					</div>
+					<div class="info-item">
+						<svg class="info-icon" viewBox="0 0 24 24" fill="currentColor">
+							<path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/>
+						</svg>
+						<div class="info-text">
+							<div class="info-label">Join Date</div>
+							<div class="info-value">{{ stats.join_date|default('11.07.2025', true) }}</div>
+						</div>
+					</div>
+					<div class="info-item">
+						<svg class="info-icon" viewBox="0 0 24 24" fill="currentColor">
+							<path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+						</svg>
+						<div class="info-text">
+							<div class="info-label">Games</div>
+							<div class="info-value">{{ stats.games|default('10', true) }}</div>
+						</div>
+					</div>
+					<div class="info-item">
+						<svg class="info-icon" viewBox="0 0 24 24" fill="currentColor">
+							<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+						</svg>
+						<div class="info-text">
+							<div class="info-label">MVP</div>
+							<div class="info-value">{{ stats.mvp|default('2', true) }}</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="league-section">
+					<div class="league-header">
+						<div class="league-name">{{ stats.league|default('Default', true) }}</div>
+						<div class="league-badge"></div>
+					</div>
+				</div>
+
+				<div class="leaderboard">
+					<div class="section-title" style="margin-bottom: 8px; font-size: 12px;">Places</div>
+					{% for player in stats.leaderboard or [
+						{'rank': '1', 'name': 'f3ktori'},
+						{'rank': '2', 'name': 'wohayo'},
+						{'rank': '3', 'name': 'NoName77'},
+						{'rank': '712', 'name': stats.name|default('imdone', true)}
+					] %}
+					<div class="leaderboard-item">
+						<div class="rank-number">#{{ player.rank }}</div>
+						<div class="player-avatar"></div>
+						<div class="player-name-small">{{ player.name }}</div>
+					</div>
+					{% endfor %}
+				</div>
+			</div>
+
+			<!-- Enhanced recent matches -->
+			<div class="card section">
+				<div class="section-title">
+					<svg class="section-icon" viewBox="0 0 24 24" fill="currentColor">
+						<path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/>
+					</svg>
+					Recent Matches
+				</div>
+				<div class="matches-grid">
+					{% for r in (stats.recent or ['L', 'L', 'W', 'L', 'W', 'L', 'W'])[:7] %}
 					<div class="match-result {% if r == 'W' %}win{% else %}loss{% endif %}">{{ r }}</div>
 					{% endfor %}
 				</div>
+				{% if (stats.recent|length or 7) > 7 %}
+				<div class="matches-overflow">
+					{% for r in (stats.recent or ['W', 'W', 'L'])[7:10] %}
+					<div class="match-result {% if r == 'W' %}win{% else %}loss{% endif %}">{{ r }}</div>
+					{% endfor %}
+				</div>
+				{% endif %}
 			</div>
 		</div>
 	</div>
