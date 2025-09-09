@@ -363,6 +363,8 @@
 			height: 24px;
 			border-radius: 4px;
 			background: rgba(255,255,255,0.1);
+			object-fit: cover;
+			border: 1px solid rgba(255,255,255,0.1);
 		}
 
 		.map-name {
@@ -408,13 +410,37 @@
 		.level-badge {
 			width: 32px;
 			height: 32px;
-			background: linear-gradient(135deg, #fbbf24, #f59e0b);
 			border-radius: 8px;
 			display: flex;
 			align-items: center;
 			justify-content: center;
 			font-weight: 800;
+		}
+
+		/* Level color coding */
+		.level-badge.level-1 {
+			background: linear-gradient(135deg, #6b7280, #4b5563);
+			color: #fff;
+		}
+
+		.level-badge.level-2, .level-badge.level-3 {
+			background: linear-gradient(135deg, #22c55e, #16a34a);
+			color: #fff;
+		}
+
+		.level-badge.level-4, .level-badge.level-5, .level-badge.level-6, .level-badge.level-7 {
+			background: linear-gradient(135deg, #fbbf24, #f59e0b);
 			color: #000;
+		}
+
+		.level-badge.level-8, .level-badge.level-9 {
+			background: linear-gradient(135deg, #f97316, #ea580c);
+			color: #fff;
+		}
+
+		.level-badge.level-10 {
+			background: linear-gradient(135deg, #ef4444, #dc2626);
+			color: #fff;
 		}
 
 		.level-info h3 {
@@ -422,17 +448,77 @@
 			margin-bottom: 2px;
 		}
 
+		/* Level number color coding */
+		.level-info h3.level-1 {
+			color: #9ca3af;
+		}
+
+		.level-info h3.level-2, .level-info h3.level-3 {
+			color: #22c55e;
+		}
+
+		.level-info h3.level-4, .level-info h3.level-5, .level-info h3.level-6, .level-info h3.level-7 {
+			color: #fbbf24;
+		}
+
+		.level-info h3.level-8, .level-info h3.level-9 {
+			color: #f97316;
+		}
+
+		.level-info h3.level-10 {
+			color: #ef4444;
+		}
+
 		.level-progress {
-			height: 6px;
+			height: 8px;
 			background: rgba(255,255,255,0.08);
-			border-radius: 3px;
+			border-radius: 4px;
 			overflow: hidden;
+			position: relative;
 		}
 
 		.level-progress-bar {
 			height: 100%;
-			background: linear-gradient(90deg, #fbbf24, #f59e0b);
 			width: var(--level-progress, 0%);
+			transition: width 0.3s ease;
+		}
+
+		/* Level progress bar color coding */
+		.level-progress-bar.level-1 {
+			background: linear-gradient(90deg, #6b7280, #4b5563);
+		}
+
+		.level-progress-bar.level-2, .level-progress-bar.level-3 {
+			background: linear-gradient(90deg, #22c55e, #16a34a);
+		}
+
+		.level-progress-bar.level-4, .level-progress-bar.level-5, .level-progress-bar.level-6, .level-progress-bar.level-7 {
+			background: linear-gradient(90deg, #fbbf24, #f59e0b);
+		}
+
+		.level-progress-bar.level-8, .level-progress-bar.level-9 {
+			background: linear-gradient(90deg, #f97316, #ea580c);
+		}
+
+		.level-progress-bar.level-10 {
+			background: linear-gradient(90deg, #ef4444, #dc2626);
+		}
+
+		.level-meter {
+			margin-top: 8px;
+		}
+
+		.level-meter-info {
+			display: flex;
+			justify-content: space-between;
+			font-size: 11px;
+			color: rgba(255,255,255,0.6);
+			margin-bottom: 4px;
+		}
+
+		.current-elo {
+			font-weight: 600;
+			color: #fff;
 		}
 
 		.info-grid {
@@ -514,6 +600,32 @@
 			height: 20px;
 			border-radius: 4px;
 			background: rgba(255,255,255,0.1);
+			object-fit: cover;
+			border: 1px solid rgba(255,255,255,0.1);
+		}
+
+		.leaderboard-header {
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			margin-bottom: 12px;
+			padding-bottom: 8px;
+			border-bottom: 1px solid rgba(255,255,255,0.1);
+		}
+
+		.af-logo {
+			width: 32px;
+			height: 32px;
+			border-radius: 6px;
+			object-fit: cover;
+		}
+
+		.leaderboard-title {
+			font-weight: 700;
+			font-size: 14px;
+			letter-spacing: 1px;
+			color: rgba(255,255,255,0.9);
+			text-transform: uppercase;
 		}
 
 		.player-name-small {
@@ -710,20 +822,29 @@
 						</div>
 					</div>
 					<div class="map-grid">
-						{% for m in stats.maps %}
-						<div class="map-card">
-							<div class="map-header">
-								<div class="map-icon"></div>
-								<div class="map-name">{{ m.name }}</div>
+							{% for m in stats.maps or [
+								{'name': 'Sandstone', 'wins': 0, 'losses': 0, 'kd': '0.00', 'win_rate': '0'},
+								{'name': 'Rust', 'wins': 0, 'losses': 0, 'kd': '0.00', 'win_rate': '0'},
+								{'name': 'Province', 'wins': 0, 'losses': 0, 'kd': '0.00', 'win_rate': '0'},
+								{'name': 'Hanami', 'wins': 0, 'losses': 0, 'kd': '0.00', 'win_rate': '0'},
+								{'name': 'Breeze', 'wins': 0, 'losses': 0, 'kd': '0.00', 'win_rate': '0'},
+								{'name': 'Zone7', 'wins': 0, 'losses': 0, 'kd': '0.00', 'win_rate': '0'},
+								{'name': 'Dune', 'wins': 0, 'losses': 0, 'kd': '0.00', 'win_rate': '0'}
+							] %}
+							<div class="map-card">
+								<div class="map-header">
+									<img class="map-icon" src="maps/{{ m.name|lower }}.png" alt="{{ m.name }} Map" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+									<div class="map-icon" style="display: none;"></div>
+									<div class="map-name">{{ m.name }}</div>
+								</div>
+								<div class="map-record">
+									<div class="map-w">W = {{ m.wins|default(0, true) }}</div>
+									<div class="map-l">L = {{ m.losses|default(0, true) }}</div>
+								</div>
+								<div class="map-stats-text">K/D = {{ m.kd|default('0.00', true) }}</div>
+								<div class="map-stats-text">W/R = {{ m.win_rate|default('0', true) }}%</div>
 							</div>
-							<div class="map-record">
-								<div class="map-w">W = {{ m.wins|default(0, true) }}</div>
-								<div class="map-l">L = {{ m.losses|default(0, true) }}</div>
-							</div>
-							<div class="map-stats-text">K/D = {{ m.kd|default('0', true) }}</div>
-							<div class="map-stats-text">W/R = {{ m.win_rate|default('0', true) }}%</div>
-						</div>
-						{% endfor %}
+							{% endfor %}
 					</div>
 				</div>
 			</div>
@@ -733,11 +854,17 @@
 			<!-- Level and player info -->
 			<div class="card section">
 				<div class="level-section">
-					<div class="level-badge">{{ stats.level|default('1', true) }}</div>
+					<div class="level-badge level-{{ stats.level|default('1', true) }}">{{ stats.level|default('1', true) }}</div>
 					<div class="level-info">
-						<h3>Level {{ stats.level|default('1', true) }}</h3>
-						<div class="level-progress">
-							<div class="level-progress-bar" style="--level-progress: {{ stats.level_progress|default('75', true) }}%"></div>
+						<h3 class="level-{{ stats.level|default('1', true) }}">Level {{ stats.level|default('1', true) }}</h3>
+						<div class="level-meter">
+							<div class="level-meter-info">
+								<span class="current-elo">{{ stats.elo|default('100', true) }} ELO</span>
+								<span>{{ stats.elo_next|default('501', true) }} ELO</span>
+							</div>
+							<div class="level-progress">
+								<div class="level-progress-bar level-{{ stats.level|default('1', true) }}" style="--level-progress: {{ stats.level_progress|default('0', true) }}%"></div>
+							</div>
 						</div>
 					</div>
 				</div>
@@ -789,16 +916,20 @@
 				</div>
 
 				<div class="leaderboard">
-					<div class="section-title" style="margin-bottom: 8px; font-size: 12px;">Places</div>
+					<div class="leaderboard-header">
+						<img class="af-logo" src="af_logo.png" alt="AF Logo">
+						<div class="leaderboard-title">Leaderboard</div>
+					</div>
 					{% for player in stats.leaderboard or [
-						{'rank': '1', 'name': 'f3ktori'},
-						{'rank': '2', 'name': 'wohayo'},
-						{'rank': '3', 'name': 'NoName77'},
-						{'rank': '712', 'name': stats.name|default('imdone', true)}
+						{'rank': '1', 'name': 'f3ktori', 'avatar': ''},
+						{'rank': '2', 'name': 'wohayo', 'avatar': ''},
+						{'rank': '3', 'name': 'NoName77', 'avatar': ''},
+						{'rank': '712', 'name': stats.name|default('imdone', true), 'avatar': stats.avatar_url|default('', true)}
 					] %}
 					<div class="leaderboard-item">
 						<div class="rank-number">#{{ player.rank }}</div>
-						<div class="player-avatar"></div>
+						<img class="player-avatar" src="{{ player.avatar|default('', true) }}" alt="{{ player.name }} Avatar" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+						<div class="player-avatar" style="display: none;"></div>
 						<div class="player-name-small">{{ player.name }}</div>
 					</div>
 					{% endfor %}
@@ -828,5 +959,65 @@
 			</div>
 		</div>
 	</div>
+	<script>
+		// ELO tier configuration from config.py
+		const ELO_TIERS = [
+			{level: 1, min: 100, max: 500},
+			{level: 2, min: 501, max: 750},
+			{level: 3, min: 751, max: 900},
+			{level: 4, min: 901, max: 1050},
+			{level: 5, min: 1051, max: 1200},
+			{level: 6, min: 1201, max: 1350},
+			{level: 7, min: 1351, max: 1530},
+			{level: 8, min: 1531, max: 1750},
+			{level: 9, min: 1751, max: 2000},
+			{level: 10, min: 2001, max: 99999}
+		];
+
+		function calculateLevelProgress(elo) {
+			// Find current level tier
+			const currentTier = ELO_TIERS.find(tier => elo >= tier.min && elo <= tier.max) || ELO_TIERS[0];
+			
+			// Calculate progress within current level
+			const progress = ((elo - currentTier.min) / (currentTier.max - currentTier.min)) * 100;
+			
+			// Find next level ELO requirement
+			const nextTier = ELO_TIERS.find(tier => tier.level === currentTier.level + 1);
+			const nextElo = nextTier ? nextTier.min : currentTier.max;
+			
+			return {
+				level: currentTier.level,
+				progress: Math.max(0, Math.min(100, progress)),
+				nextElo: nextElo,
+				currentElo: elo
+			};
+		}
+
+		// Update level display on page load
+		document.addEventListener('DOMContentLoaded', function() {
+			// Get ELO from template or use default
+			const eloElement = document.querySelector('.current-elo');
+			if (eloElement) {
+				const eloText = eloElement.textContent;
+				const elo = parseInt(eloText.match(/\d+/)?.[0] || '100');
+				
+				const levelData = calculateLevelProgress(elo);
+				
+				// Update progress bar
+				const progressBar = document.querySelector('.level-progress-bar');
+				if (progressBar) {
+					progressBar.style.setProperty('--level-progress', levelData.progress + '%');
+				}
+				
+				// Update next ELO display
+				const nextEloElement = document.querySelector('.level-meter-info span:last-child');
+				if (nextEloElement && levelData.level < 10) {
+					nextEloElement.textContent = levelData.nextElo + ' ELO';
+				} else if (nextEloElement && levelData.level === 10) {
+					nextEloElement.textContent = 'MAX LEVEL';
+				}
+			}
+		});
+	</script>
 </body>
 </html>
