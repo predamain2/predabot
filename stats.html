@@ -14,7 +14,6 @@
 			padding: 0;
 		}
 
-		/* Main layout - closer to the reference UI */
 		body {
 			background: radial-gradient(1000px 500px at 80% -10%, rgba(220, 20, 60, 0.25), transparent 60%),
 				radial-gradient(1000px 500px at 10% 110%, rgba(124, 58, 237, 0.25), transparent 60%),
@@ -47,7 +46,7 @@
 			grid-column: 1 / -1;
 			padding: 18px 20px;
 			display: grid;
-			grid-template-columns: 80px minmax(0, 1fr) minmax(280px, 460px);
+			grid-template-columns: 80px minmax(0, 1fr); /* removed 3rd column */
 			gap: 16px;
 			align-items: center;
 		}
@@ -68,23 +67,22 @@
 		}
 
 		.header-stats {
-			display: grid;
-			grid-template-columns: 1fr;
-			gap: 12px;
-			justify-self: end;
-			width: 100%;
+			display: flex;
+			gap: 10px;
+			margin-top: 8px;
+			justify-content: flex-start; /* align left */
 		}
 
 		.header-pill {
 			background: rgba(255,255,255,0.03);
 			border: 1px solid rgba(255,255,255,0.08);
 			border-radius: 10px;
-			padding: 10px 12px;
+			padding: 6px 10px;
 			text-align: center;
 		}
 
-		.header-pill .label { font-size: 11px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px; }
-		.header-pill .value { font-size: 18px; font-weight: 800; margin-top: 4px; }
+		.header-pill .label { font-size: 10px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px; }
+		.header-pill .value { font-size: 16px; font-weight: 800; margin-top: 2px; }
 
 		.grid-2 {
 			display: grid;
@@ -162,9 +160,12 @@
 			<div class="player-meta">
 				<h2>{{ stats.name|default('Player', true) }}<img class="level-badge" src="level_icons/{{ stats.level or 1 }}.png" alt="Lvl"></h2>
 				<div class="sub">ID: {{ stats.player_id|default('-', true) }}</div>
-			</div>
-			<div class="header-stats">
-				<div class="header-pill"><div class="label">Points</div><div class="value">{{ stats.points|default(0, true) }}</div></div>
+				<div class="header-stats">
+					<div class="header-pill">
+						<div class="label">Points</div>
+						<div class="value">{{ stats.points|default(0, true) }}</div>
+					</div>
+				</div>
 			</div>
 		</div>
 
@@ -174,7 +175,7 @@
 					<div class="panel-title">Statistic</div>
 					<div class="stats-area">
 						<div>
-							<div class="kd-ring" style="--killsP: {{ (stats.kills / (stats.kills + stats.deaths) * 100) if (stats.kills + stats.deaths) > 0 else 0 }}">
+							<div class="kd-ring" style="--killsP: {{ (stats.kills / (stats.kills + stats.deaths) * 100) if (stats.kills + stats.deaths) > 0 else 0 }}%">
 								<div class="inner"></div>
 								<div class="text">{{ stats.kd|default(0, true) }}</div>
 							</div>
