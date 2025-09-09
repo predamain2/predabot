@@ -137,9 +137,6 @@
 		.map-card .meta { font-size: 12px; color: rgba(255,255,255,0.7); }
 
 		.right-col { display: grid; gap: 20px; }
-		.qual-item { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: center; padding: 8px; border-radius: 8px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); }
-		.qual-rank { font-weight: 900; color: #ffcc00; }
-		.qual-name { font-weight: 600; }
 
 		.recent-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 8px; }
 		.rec { height: 28px; border-radius: 6px; display: grid; place-items: center; font-weight: 800; font-size: 12px; }
@@ -161,10 +158,10 @@
 				<div class="sub">ID: {{ stats.player_id|default('-', true) }}</div>
 			</div>
 			<div class="header-stats">
-				<div class="header-pill"><div class="label">Playtime</div><div class="value">{{ stats.playtime|default('—', true) }}</div></div>
-				<div class="header-pill"><div class="label">Join Date</div><div class="value">{{ stats.join_date|default('—', true) }}</div></div>
+				<div class="header-pill"><div class="label">Points</div><div class="value">{{ stats.points|default(0, true) }}</div></div>
 				<div class="header-pill"><div class="label">Games</div><div class="value">{{ stats.total_games|default(0, true) }}</div></div>
-				<div class="header-pill"><div class="label">MVP</div><div class="value">{{ stats.mvp|default(0, true) }}</div></div>
+				<div class="header-pill"><div class="label">Wins</div><div class="value">{{ stats.wins|default(0, true) }}</div></div>
+				<div class="header-pill"><div class="label">Losses</div><div class="value">{{ stats.losses|default(0, true) }}</div></div>
 			</div>
 		</div>
 
@@ -184,12 +181,9 @@
 							</div>
 						</div>
 						<div class="small-grid">
-							<div class="small-card"><div class="label">Rating</div><div class="value">{{ stats.rating|default('—', true) }}</div><div class="bar" style="--w: {{ (stats.rating or 0) * 50 }}%"></div></div>
 							<div class="small-card"><div class="label">AVG</div><div class="value">{{ stats.avg|default('—', true) }}</div><div class="bar" style="--w: {{ (stats.avg or 0) * 5 }}%"></div></div>
-							<div class="small-card"><div class="label">Impact</div><div class="value">{{ stats.impact|default('—', true) }}</div><div class="bar" style="--w: {{ (stats.impact or 0) * 50 }}%"></div></div>
-							<div class="small-card"><div class="label">KPR</div><div class="value">{{ stats.kpr|default('—', true) }}</div><div class="bar" style="--w: {{ (stats.kpr or 0) * 100 }}%"></div></div>
 							<div class="small-card"><div class="label">Assists</div><div class="value">{{ stats.assists|default(0, true) }}</div><div class="bar" style="--w: {{ (stats.assists or 0) % 100 }}%"></div></div>
-							<div class="small-card"><div class="label">SVR</div><div class="value">{{ stats.svr|default('—', true) }}</div><div class="bar" style="--w: {{ (stats.svr or 0) * 100 }}%"></div></div>
+							<div class="small-card"><div class="label">Win Rate</div><div class="value">{{ stats.win_rate|default(0, true) }}%</div><div class="bar" style="--w: {{ (stats.win_rate or 0) * 1 }}%"></div></div>
 						</div>
 					</div>
 				</div>
@@ -220,13 +214,6 @@
 			</div>
 
 			<div class="right-col">
-				<div class="card panel">
-					<div class="panel-title">Qualifications</div>
-					{% for q in stats.qualifications or [] %}
-					<div class="qual-item"><div class="qual-rank">#{{ q.rank }}</div><div class="qual-name">{{ q.name }}</div><div class="qual-score">{{ q.score|default('', true) }}</div></div>
-					{% endfor %}
-				</div>
-
 				<div class="card panel">
 					<div class="panel-title">Recent Matches</div>
 					<div class="recent-grid">
