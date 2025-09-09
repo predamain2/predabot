@@ -2837,16 +2837,20 @@ async def reset_season(interaction: discord.Interaction):
             await interaction.followup.send("❌ This command can only be used in a server.", ephemeral=True)
             return
         
+        # Count registered players for confirmation
+        registered_count = len([k for k in player_data.keys() if k != "dummy" and not k.startswith("AUTO_") and k.isdigit()])
+        
         # Confirmation embed
         embed = discord.Embed(
             title="⚠️ Season Reset Confirmation",
-            description="This will **permanently**:\n"
+            description=f"This will **permanently** reset **{registered_count} registered players**:\n"
                        "• Reset all player ELO to 100\n"
                        "• Reset all wins/losses to 0\n"
-                       "• Revert all players to Level 1 roles\n"
+                       "• Revert all registered players to Level 1 roles\n"
                        "• Clear all match results\n"
                        "• Clear all party data\n"
                        "• Clear all match history\n\n"
+                       "**Only registered players will be affected.**\n"
                        "**This action cannot be undone!**",
             color=discord.Color.red()
         )
@@ -2900,11 +2904,16 @@ async def reset_season(interaction: discord.Interaction):
             "errors": []
         }
         
-        # 1. Reset all player stats and roles
+        # 1. Reset all REGISTERED player stats and roles only
         level1_role = guild.get_role(config.ROLE_LEVELS.get(1))
+        registered_players = {k: v for k, v in player_data.items() if k != "dummy"}
         
-        for user_id, player_info in player_data.items():
+        for user_id, player_info in registered_players.items():
             try:
+                # Skip if user_id is not a valid Discord ID (auto-generated entries)
+                if user_id.startswith("AUTO_") or not user_id.isdigit():
+                    continue
+                
                 # Reset player stats
                 player_data[user_id].update({
                     "elo": config.DEFAULT_ELO,
@@ -2914,7 +2923,7 @@ async def reset_season(interaction: discord.Interaction):
                 })
                 reset_stats["players_reset"] += 1
                 
-                # Update Discord roles
+                # Update Discord roles for registered players only
                 member = guild.get_member(int(user_id))
                 if member:
                     try:
@@ -2936,6 +2945,9 @@ async def reset_season(interaction: discord.Interaction):
                         
                     except Exception as e:
                         reset_stats["errors"].append(f"Role update failed for {player_info.get('nick', user_id)}: {str(e)}")
+                else:
+                    # Player no longer in server - still reset their stats but note it
+                    reset_stats["errors"].append(f"Player {player_info.get('nick', user_id)} no longer in server - stats reset but roles unchanged")
                         
             except Exception as e:
                 reset_stats["errors"].append(f"Player reset failed for {user_id}: {str(e)}")
@@ -2968,7 +2980,7 @@ async def reset_season(interaction: discord.Interaction):
         
         success_embed.add_field(
             name="📊 Reset Statistics",
-            value=f"• **{reset_stats['players_reset']}** players reset to Level 1\n"
+            value=f"• **{reset_stats['players_reset']}** registered players reset to Level 1\n"
                   f"• **{reset_stats['roles_updated']}** Discord roles updated\n"
                   f"• **{reset_stats['files_cleared']}** data files cleared",
             inline=False
