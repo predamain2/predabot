@@ -3154,6 +3154,173 @@ async def check_permissions(interaction: discord.Interaction):
     
     await interaction.followup.send(embed=embed, ephemeral=True)
 
+@bot.tree.command(name="remove_banned_players", description="Remove all banned players from the database (Staff/Mod/Owner only)")
+@staff_mod_owner_only()
+async def remove_banned_players(interaction: discord.Interaction):
+    """Remove all players marked as banned from players.json"""
+    await interaction.response.defer(ephemeral=True)
+    
+    try:
+        # Find all banned players
+        banned_players = {}
+        for user_id, player_info in player_data.items():
+            if player_info.get('banned', False):
+                banned_players[user_id] = player_info
+        
+        if not banned_players:
+            embed = discord.Embed(
+                title="ℹ️ No Banned Players Found",
+                description="There are currently no players marked as banned in the database.",
+                color=discord.Color.blue()
+            )
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return
+        
+        # Create confirmation embed
+        banned_list = []
+        for user_id, player_info in banned_players.items():
+            nick = player_info.get('nick', 'Unknown')
+            pid = player_info.get('id', 'N/A')
+            banned_list.append(f"• **{nick}** (ID: `{pid}`, Discord: <@{user_id}>)")
+        
+        # Limit display to first 10 players to avoid embed size limits
+        display_list = banned_list[:10]
+        if len(banned_list) > 10:
+            display_list.append(f"... and {len(banned_list) - 10} more players")
+        
+        embed = discord.Embed(
+            title="⚠️ Remove Banned Players Confirmation",
+            description=f"Found **{len(banned_players)}** banned players to remove:\n\n" + "\n".join(display_list),
+            color=discord.Color.red()
+        )
+        
+        embed.add_field(
+            name="⚠️ Warning",
+            value="**This action will permanently remove these players from the database.**\n"
+                  "Their stats, ELO, and registration data will be deleted.\n"
+                  "**This cannot be undone!**",
+            inline=False
+        )
+        
+        # Create confirmation view
+        class ConfirmRemovalView(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=60.0)
+                self.confirmed = False
+            
+            @discord.ui.button(label="✅ CONFIRM REMOVAL", style=discord.ButtonStyle.danger)
+            async def confirm_removal(self, button_interaction: discord.Interaction, button: discord.ui.Button):
+                if button_interaction.user.id != interaction.user.id:
+                    await button_interaction.response.send_message("❌ Only the command user can confirm this action.", ephemeral=True)
+                    return
+                
+                self.confirmed = True
+                await button_interaction.response.defer()
+                self.stop()
+            
+            @discord.ui.button(label="❌ Cancel", style=discord.ButtonStyle.secondary)
+            async def cancel_removal(self, button_interaction: discord.Interaction, button: discord.ui.Button):
+                if button_interaction.user.id != interaction.user.id:
+                    await button_interaction.response.send_message("❌ Only the command user can cancel this action.", ephemeral=True)
+                    return
+                
+                await button_interaction.response.send_message("✅ Removal cancelled.", ephemeral=True)
+                self.stop()
+        
+        view = ConfirmRemovalView()
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+        
+        # Wait for confirmation
+        await view.wait()
+        
+        if not view.confirmed:
+            return
+        
+        # Start the removal process
+        removal_embed = discord.Embed(
+            title="🔄 Removing Banned Players...",
+            description="Please wait while banned players are being removed from the database...",
+            color=discord.Color.orange()
+        )
+        await interaction.edit_original_response(embed=removal_embed, view=None)
+        
+        # Remove banned players
+        removed_count = 0
+        removal_log = []
+        
+        for user_id in list(banned_players.keys()):
+            try:
+                player_info = player_data[user_id]
+                nick = player_info.get('nick', 'Unknown')
+                
+                # Remove from player_data
+                del player_data[user_id]
+                removed_count += 1
+                removal_log.append(f"✅ Removed: {nick} (ID: {user_id})")
+                
+            except Exception as e:
+                removal_log.append(f"❌ Failed to remove {user_id}: {str(e)}")
+        
+        # Save updated player data
+        save_players()
+        
+        # Create success embed
+        success_embed = discord.Embed(
+            title="✅ Banned Players Removed Successfully!",
+            color=discord.Color.green()
+        )
+        
+        success_embed.add_field(
+            name="📊 Removal Statistics",
+            value=f"• **{removed_count}** banned players removed\n"
+                  f"• **{len(player_data)}** players remaining in database\n"
+                  f"• Database cleaned and saved",
+            inline=False
+        )
+        
+        # Add removal log (first 10 entries)
+        if removal_log:
+            log_text = "\n".join(removal_log[:10])
+            if len(removal_log) > 10:
+                log_text += f"\n... and {len(removal_log) - 10} more entries"
+            
+            success_embed.add_field(
+                name="📝 Removal Log",
+                value=f"```{log_text}```",
+                inline=False
+            )
+        
+        success_embed.add_field(
+            name="🔄 Next Steps",
+            value="• Leaderboard will be automatically updated\n"
+                  "• Banned players can re-register if unbanned\n"
+                  "• Database has been cleaned of banned entries",
+            inline=False
+        )
+        
+        await interaction.edit_original_response(embed=success_embed, view=None)
+        
+        # Update leaderboard
+        try:
+            from commands import General
+            cog = bot.get_cog('General')
+            if cog and interaction.guild:
+                await cog.post_leaderboard(interaction.guild)
+        except Exception as e:
+            print(f"Failed to update leaderboard after removing banned players: {e}")
+        
+        # Log the action
+        print(f"[ADMIN] {interaction.user} removed {removed_count} banned players from database")
+        
+    except Exception as e:
+        error_embed = discord.Embed(
+            title="❌ Failed to Remove Banned Players",
+            description=f"An error occurred during the removal process:\n```{str(e)}```",
+            color=discord.Color.red()
+        )
+        await interaction.edit_original_response(embed=error_embed, view=None)
+        print(f"Error in remove_banned_players command: {str(e)}")
+
 
 if __name__ == '__main__':
     bot.run(config.TOKEN)
