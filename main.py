@@ -2303,6 +2303,14 @@ async def stats(interaction: discord.Interaction):
         per_map = {}
         recent_results = []
 
+        from difflib import SequenceMatcher
+
+        def normalize_name(name: str) -> str:
+            import re
+            return re.sub(r"[^a-z0-9]", "", str(name).lower())
+
+        current_nick_norm = normalize_name(pdata.get('nick', ''))
+
         for match in load_results().values():
             map_name = match.get('map', 'Unknown')
             outcome = None
@@ -2310,8 +2318,21 @@ async def stats(interaction: discord.Interaction):
             for team_key in ['winning_team', 'losing_team']:
                 for p in match.get(team_key, []) or []:
                     # Prefer discord_id snapshot; fallback to nickname match for legacy entries
-                    p_id = str(p.get('discord_id')) if p.get('discord_id') is not None else None
-                    name_match = (str(p.get('name', '')).lower() == str(pdata.get('nick','')).lower())
+                    p_id_raw = p.get('discord_id')
+                    p_id = str(p_id_raw) if p_id_raw not in (None, '', 'None') else None
+                    p_name = str(p.get('name', ''))
+                    name_match = False
+                    if not p_id:
+                        # Fuzzy match against current nick
+                        p_name_norm = normalize_name(p_name)
+                        if p_name_norm == current_nick_norm:
+                            name_match = True
+                        else:
+                            try:
+                                ratio = SequenceMatcher(None, p_name_norm, current_nick_norm).ratio()
+                                name_match = ratio >= 0.85
+                            except Exception:
+                                name_match = False
                     if p_id == discord_id or (p_id in (None, 'None', '') and name_match):
                         k = int(p.get('kills', 0))
                         d = int(p.get('deaths', 0))
@@ -2357,6 +2378,7 @@ async def stats(interaction: discord.Interaction):
         stats_data = {
             'name': pdata.get('nick', 'Unknown'),
             'player_id': pdata.get('id', ''),
+            'avatar_url': str(interaction.user.display_avatar.url),
             'points': pdata.get('elo', 1000),
             'total_games': total_games,
             'wins': wins,

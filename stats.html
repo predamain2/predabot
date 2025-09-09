@@ -47,18 +47,12 @@
 			grid-column: 1 / -1;
 			padding: 18px 20px;
 			display: grid;
-			grid-template-columns: 80px 1fr 400px;
+			grid-template-columns: 80px 1fr 330px;
 			gap: 16px;
 			align-items: center;
 		}
 
-		.avatar {
-			width: 72px;
-			height: 72px;
-			border-radius: 12px;
-			background: linear-gradient(135deg, #1f1f23, #141417);
-			border: 1px solid rgba(255,255,255,0.08);
-		}
+		.avatar { width: 72px; height: 72px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08); object-fit: cover; }
 
 		.player-meta h2 {
 			margin: 0;
@@ -152,7 +146,7 @@
 <body>
 	<div class="page">
 		<div class="card header-card">
-			<div class="avatar"></div>
+			<img class="avatar" src="{{ stats.avatar_url|default('', true) }}" alt="avatar">
 			<div class="player-meta">
 				<h2>{{ stats.name|default('Player', true) }}</h2>
 				<div class="sub">ID: {{ stats.player_id|default('-', true) }}</div>
@@ -160,8 +154,8 @@
 			<div class="header-stats">
 				<div class="header-pill"><div class="label">Points</div><div class="value">{{ stats.points|default(0, true) }}</div></div>
 				<div class="header-pill"><div class="label">Games</div><div class="value">{{ stats.total_games|default(0, true) }}</div></div>
-				<div class="header-pill"><div class="label">Wins</div><div class="value">{{ stats.wins|default(0, true) }}</div></div>
-				<div class="header-pill"><div class="label">Losses</div><div class="value">{{ stats.losses|default(0, true) }}</div></div>
+				<div class="header-pill"><div class="label">K/D</div><div class="value">{{ stats.kd|default(0, true) }}</div></div>
+				<div class="header-pill"><div class="label">Win Rate</div><div class="value">{{ stats.win_rate|default(0, true) }}%</div></div>
 			</div>
 		</div>
 
