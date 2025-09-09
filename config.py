@@ -10,7 +10,7 @@ REGISTER_CHANNEL_ID = 1408840623900852224
 TIMEOUT_NOTIFICATION_CHANNEL_ID = 1411848489272475769  # Channel for timeout notifications
 
 # Role IDs for permissions
-OWNER_ROLE_ID = 0  # Set this to the actual owner role ID
+OWNER_ROLE_ID = 1390707547849097409  # Owner role ID
 STAFF_ROLE_ID = 0  # Set this to the actual staff role ID  
 MODERATOR_ROLE_ID = 0  # Set this to the actual moderator role ID
 
