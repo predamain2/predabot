@@ -2465,19 +2465,30 @@ async def stats(interaction: discord.Interaction):
         if current_rank > 3:
             leaderboard.append({'rank': str(current_rank), 'name': player_data[key].get('nick', 'Unknown')})
 
-        # Enhanced map cards for template
+        # Enhanced map cards for template - ensure all config maps are included
         maps_list = []
-        for m in per_map.values():
-            games_on_map = m['wins'] + m['losses']
-            kd_map = (m['kills'] / m['deaths']) if m['deaths'] > 0 else (m['kills'])
-            wr_map = round((m['wins'] / games_on_map * 100), 0) if games_on_map > 0 else 0
-            maps_list.append({
-                'name': m['name'],
-                'wins': m['wins'],
-                'losses': m['losses'],
-                'kd': f"{kd_map:.2f}" if m['deaths'] > 0 else f"{m['kills']}",
-                'win_rate': int(wr_map)
-            })
+        for map_name in config.MAPS:
+            if map_name in per_map:
+                m = per_map[map_name]
+                games_on_map = m['wins'] + m['losses']
+                kd_map = (m['kills'] / m['deaths']) if m['deaths'] > 0 else (m['kills'])
+                wr_map = round((m['wins'] / games_on_map * 100), 0) if games_on_map > 0 else 0
+                maps_list.append({
+                    'name': m['name'],
+                    'wins': m['wins'],
+                    'losses': m['losses'],
+                    'kd': f"{kd_map:.2f}" if m['deaths'] > 0 else f"{m['kills']}",
+                    'win_rate': int(wr_map)
+                })
+            else:
+                # Map not played yet - add with zero stats
+                maps_list.append({
+                    'name': map_name,
+                    'wins': 0,
+                    'losses': 0,
+                    'kd': '0.00',
+                    'win_rate': 0
+                })
 
         # Cap recent to 30 like the reference grid
         recent_symbols = recent_results[-30:]
