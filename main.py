@@ -2360,19 +2360,25 @@ async def stats(interaction: discord.Interaction):
         win_rate = f"{win_rate_num:.0f}"
         avg_kills = (total_kills / total_games) if total_games > 0 else 0
 
-        # Calculate advanced statistics
+        # Calculate advanced statistics with better scaling
         rounds_played = total_games * 16  # Assuming average 16 rounds per match
         kpr = (total_kills / rounds_played) if rounds_played > 0 else 0
         
-        # Impact rating calculation (simplified)
-        impact = kd_ratio_num * 0.6 + (avg_kills / 20) * 0.4 if avg_kills > 0 else 0
+        # Impact rating calculation (simplified) - scale to 0-3 range
+        impact = min(3.0, max(0.0, kd_ratio_num * 0.8 + (avg_kills / 25) * 0.2)) if avg_kills > 0 else 1.0
         
-        # SVR (Survival Rate) - simplified calculation
-        svr = ((total_kills - total_deaths) / total_games) if total_games > 0 else 0
-        svr = max(0, min(1, svr))  # Clamp between 0 and 1
+        # SVR (Survival Rate) - better calculation based on K/D
+        if total_games > 0:
+            survival_factor = min(1.0, max(0.0, (total_kills - total_deaths + total_games) / (total_games * 2)))
+            svr = survival_factor
+        else:
+            svr = 0.5
         
-        # Rating calculation (simplified HLTV-style)
-        rating = (kd_ratio_num * 0.5 + impact * 0.3 + (avg_kills / 15) * 0.2) if total_games > 0 else 1.0
+        # Rating calculation (HLTV-style) - scale to 0-3 range  
+        if total_games > 0:
+            rating = min(3.0, max(0.0, kd_ratio_num * 0.6 + (avg_kills / 20) * 0.3 + (win_rate_num / 100) * 0.1))
+        else:
+            rating = 1.0
         
         # Extract clan tag from name (everything before first space or #)
         player_name = pdata.get('nick', 'Unknown')
@@ -2388,27 +2394,46 @@ async def stats(interaction: discord.Interaction):
                 clan_tag = parts[0]
                 player_name = parts[1]
         
-        # Calculate level based on total games and performance
-        level = min(50, max(1, total_games // 2 + (wins // 5)))
-        level_progress = ((total_games % 2) * 50) + min(50, (wins % 5) * 10)
+        # If no clan tag extracted, show Discord user ID or indicate left server
+        if not clan_tag:
+            try:
+                # Try to get the member to see if they're still in server
+                member = interaction.guild.get_member(int(key))
+                if member:
+                    clan_tag = f"#{key[-4:]}"  # Show last 4 digits of Discord ID
+                else:
+                    clan_tag = "Left"  # User left the server
+            except:
+                clan_tag = "???"
+        
+        # Use config level system based on ELO
+        elo = pdata.get('elo', config.DEFAULT_ELO)
+        level = config.get_level_from_elo(elo)
+        
+        # Calculate level progress within current tier
+        current_tier = None
+        next_tier = None
+        for tier_level, min_elo, max_elo in config.ELO_TIERS:
+            if tier_level == level:
+                current_tier = (min_elo, max_elo)
+            elif tier_level == level + 1:
+                next_tier = (min_elo, max_elo)
+                break
+        
+        if current_tier and next_tier:
+            tier_range = current_tier[1] - current_tier[0]
+            current_progress = elo - current_tier[0]
+            level_progress = min(100, max(0, (current_progress / tier_range) * 100))
+        else:
+            level_progress = 75  # Default progress if at max level
         
         # Calculate playtime (rough estimate: 15 min per game)
         playtime_minutes = total_games * 15
         playtime_hours = playtime_minutes // 60
         playtime = f"{playtime_hours}h" if playtime_hours > 0 else f"{playtime_minutes}m"
         
-        # Determine league based on ELO
-        elo = pdata.get('elo', 1000)
-        if elo >= 1800:
-            league = "Master"
-        elif elo >= 1600:
-            league = "Diamond"
-        elif elo >= 1400:
-            league = "Gold"
-        elif elo >= 1200:
-            league = "Silver"
-        else:
-            league = "Bronze"
+        # Use only "Leaderboard" as league name
+        league = "Leaderboard"
         
         # Calculate MVP count (simplified: ~10% of wins)
         mvp = max(1, wins // 10)
@@ -2478,10 +2503,10 @@ async def stats(interaction: discord.Interaction):
             'assists': total_assists,
             'avg': round(avg_kills, 1),
             'kd': kd_ratio,
-            'rating': f"{rating:.2f}",
-            'impact': f"{impact:.2f}",
-            'kpr': f"{kpr:.2f}",
-            'svr': f"{svr:.2f}",
+            'rating': rating,  # Send as number for template calculations
+            'impact': impact,  # Send as number for template calculations  
+            'kpr': kpr,       # Send as number for template calculations
+            'svr': svr,       # Send as number for template calculations
             'win_rate': win_rate,
             'maps': maps_list,
             'recent': recent_symbols

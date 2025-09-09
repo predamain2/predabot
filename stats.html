@@ -643,8 +643,8 @@
 								<div class="stat-label">Rating</div>
 								<div class="stat-rating strong">Strong</div>
 							</div>
-							<div class="stat-value">{{ stats.rating|default('1.13', true) }}</div>
-							<div class="stat-bar" style="--progress: {{ (stats.rating or 1.13) * 50 }}%"></div>
+							<div class="stat-value">{{ "%.2f"|format(stats.rating or 1.13) }}</div>
+							<div class="stat-bar" style="--progress: {{ ((stats.rating or 1.13) / 3.0 * 100)|round }}%"></div>
 						</div>
 						<div class="stat-card">
 							<div class="stat-header">
@@ -659,16 +659,16 @@
 								<div class="stat-label">Impact</div>
 								<div class="stat-rating strong">Strong</div>
 							</div>
-							<div class="stat-value">{{ stats.impact|default('1.21', true) }}</div>
-							<div class="stat-bar" style="--progress: {{ (stats.impact or 1.21) * 60 }}%"></div>
+							<div class="stat-value">{{ "%.2f"|format(stats.impact or 1.21) }}</div>
+							<div class="stat-bar" style="--progress: {{ ((stats.impact or 1.21) / 3.0 * 100)|round }}%"></div>
 						</div>
 						<div class="stat-card">
 							<div class="stat-header">
 								<div class="stat-label">KPR</div>
 								<div class="stat-rating strong">Strong</div>
 							</div>
-							<div class="stat-value">{{ stats.kpr|default('0.92', true) }}</div>
-							<div class="stat-bar" style="--progress: {{ (stats.kpr or 0.92) * 80 }}%"></div>
+							<div class="stat-value">{{ "%.2f"|format(stats.kpr or 0.92) }}</div>
+							<div class="stat-bar" style="--progress: {{ ((stats.kpr or 0.92) * 100)|round }}%"></div>
 						</div>
 						<div class="stat-card">
 							<div class="stat-header">
@@ -683,8 +683,8 @@
 								<div class="stat-label">SVR</div>
 								<div class="stat-rating stable">Stable</div>
 							</div>
-							<div class="stat-value">{{ stats.svr|default('0.32', true) }}</div>
-							<div class="stat-bar" style="--progress: {{ (stats.svr or 0.32) * 100 }}%"></div>
+							<div class="stat-value">{{ "%.2f"|format(stats.svr or 0.32) }}</div>
+							<div class="stat-bar" style="--progress: {{ ((stats.svr or 0.32) * 100)|round }}%"></div>
 						</div>
 					</div>
 				</div>
