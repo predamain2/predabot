@@ -23,7 +23,7 @@
 			font-family: 'Inter', sans-serif;
 			min-height: 100vh;
 			display: flex;
-			align-items: center;
+			align-items: flex-start;
 			justify-content: center;
 			padding: 24px;
 		}
@@ -47,7 +47,7 @@
 			grid-column: 1 / -1;
 			padding: 18px 20px;
 			display: grid;
-			grid-template-columns: 80px 1fr 460px;
+			grid-template-columns: 80px minmax(0, 1fr) minmax(280px, 460px);
 			gap: 16px;
 			align-items: center;
 		}
@@ -141,6 +141,17 @@
 			.page { grid-template-columns: 1fr; }
 			.header-card { grid-template-columns: 80px 1fr; }
 			.header-stats { justify-self: start; width: auto; }
+		}
+
+		@media (max-width: 900px) {
+			.stats-area { grid-template-columns: 1fr; }
+			.map-grid { grid-template-columns: 1fr; }
+			.map-cards { grid-template-columns: repeat(2, 1fr); }
+		}
+
+		@media (max-width: 600px) {
+			.kd-ring { width: 140px; height: 140px; }
+			.map-cards { grid-template-columns: 1fr; }
 		}
 	</style>
 </head>
