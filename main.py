@@ -406,8 +406,8 @@ class RegisterModal(discord.ui.Modal, title="Player Registration"):
         max_length=32
     )
     pid = discord.ui.TextInput(
-        label="Standoff 2 ID",
-        placeholder="Enter your player ID (numbers only, e.g. 123456789)",
+        label="Standoff 2 ID (Numbers Only)",
+        placeholder="Enter ONLY numbers (e.g. 123456789) - NO letters allowed",
         min_length=1,
         max_length=20
     )
@@ -423,9 +423,36 @@ class RegisterModal(discord.ui.Modal, title="Player Registration"):
         # Defer the response immediately
         await interaction.response.defer(ephemeral=True)
 
-        # Validate that ID contains only numbers
+        # Enhanced validation for Player ID
         if not pid_value.isdigit():
-            await interaction.followup.send("❌ Player ID must contain only numbers.", ephemeral=True
+            # Provide specific feedback about what's wrong
+            invalid_chars = [char for char in pid_value if not char.isdigit()]
+            await interaction.followup.send(
+                f"❌ **Invalid Player ID Format**\n"
+                f"Your ID contains invalid characters: `{''.join(set(invalid_chars))}`\n"
+                f"**Player ID must contain ONLY numbers (0-9)**\n"
+                f"Example: `123456789` ✅\n"
+                f"Your input: `{pid_value}` ❌", 
+                ephemeral=True
+            )
+            return
+        
+        # Additional validation: Check if ID is reasonable length
+        if len(pid_value) < 3:
+            await interaction.followup.send(
+                "❌ **Player ID too short**\n"
+                "Your Player ID must be at least 3 digits long.\n"
+                "Please check your Standoff 2 profile for the correct ID.",
+                ephemeral=True
+            )
+            return
+            
+        if len(pid_value) > 15:
+            await interaction.followup.send(
+                "❌ **Player ID too long**\n"
+                "Player IDs are typically 6-12 digits long.\n"
+                "Please double-check your Standoff 2 Player ID.",
+                ephemeral=True
             )
             return
 
@@ -2147,14 +2174,51 @@ async def level_info(interaction: discord.Interaction):
 
 class EditProfileModal(discord.ui.Modal, title="Edit Profile"):
     nick = discord.ui.TextInput(label="New Nickname", placeholder="Enter your new in-game nickname")
-    pid = discord.ui.TextInput(label="New Player ID", placeholder="Enter your new Standoff2 ID")
+    pid = discord.ui.TextInput(label="New Player ID (Numbers Only)", placeholder="Enter ONLY numbers - NO letters allowed")
 
     async def on_submit(self, interaction: discord.Interaction):
         member = interaction.user
+        
+        # Get cleaned values
+        nick_value = str(self.nick).strip()
+        pid_value = str(self.pid).strip()
+        
+        # Enhanced validation for Player ID
+        if not pid_value.isdigit():
+            # Provide specific feedback about what's wrong
+            invalid_chars = [char for char in pid_value if not char.isdigit()]
+            await interaction.response.send_message(
+                f"❌ **Invalid Player ID Format**\n"
+                f"Your ID contains invalid characters: `{''.join(set(invalid_chars))}`\n"
+                f"**Player ID must contain ONLY numbers (0-9)**\n"
+                f"Example: `123456789` ✅\n"
+                f"Your input: `{pid_value}` ❌", 
+                ephemeral=True
+            )
+            return
+        
+        # Additional validation: Check if ID is reasonable length
+        if len(pid_value) < 3:
+            await interaction.response.send_message(
+                "❌ **Player ID too short**\n"
+                "Your Player ID must be at least 3 digits long.\n"
+                "Please check your Standoff 2 profile for the correct ID.",
+                ephemeral=True
+            )
+            return
+            
+        if len(pid_value) > 15:
+            await interaction.response.send_message(
+                "❌ **Player ID too long**\n"
+                "Player IDs are typically 6-12 digits long.\n"
+                "Please double-check your Standoff 2 Player ID.",
+                ephemeral=True
+            )
+            return
 
         # Prevent duplicate nick/id registration across different users
         for k, v in player_data.items():
-            if (v.get("nick","").lower() == str(self.nick).lower() or v.get("id") == str(self.pid)):
+            if (v.get("nick","").lower() == nick_value.lower() or v.get("id") == pid_value):
                 if k != str(member.id):
                     await interaction.response.send_message(
                         "❌ That nickname or ID is already registered by another user.", ephemeral=True
@@ -2166,10 +2230,9 @@ class EditProfileModal(discord.ui.Modal, title="Edit Profile"):
             await interaction.response.send_message("❌ You are not registered. Use /register first.", ephemeral=True)
             return
             
-        # Set the new nickname
-        clean_nick = str(self.nick).strip()
-        pdata["nick"] = clean_nick
-        pdata["id"] = str(self.pid)
+        # Set the new nickname and ID
+        pdata["nick"] = nick_value
+        pdata["id"] = pid_value
         save_players()
 
         # Update leaderboard after profile update
@@ -2180,7 +2243,7 @@ class EditProfileModal(discord.ui.Modal, title="Edit Profile"):
         # Create the embed with profile update info
         embed = discord.Embed(
             title="✅ Profile Updated",
-            description=f"Nickname: **{clean_nick}**\nPlayer ID: **{self.pid}**",
+            description=f"Nickname: **{nick_value}**\nPlayer ID: **{pid_value}**",
             color=discord.Color.green()
         )
 
@@ -2194,7 +2257,7 @@ class EditProfileModal(discord.ui.Modal, title="Edit Profile"):
                 )
             else:
                 try:
-                    await member.edit(nick=clean_nick)
+                    await member.edit(nick=nick_value)
                 except discord.errors.Forbidden:
                     embed.add_field(
                         name="ℹ️ Note",
