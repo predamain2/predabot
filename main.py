@@ -2380,6 +2380,7 @@ async def stats(interaction: discord.Interaction):
             'player_id': pdata.get('id', ''),
             'avatar_url': str(interaction.user.display_avatar.url),
             'points': pdata.get('elo', 1000),
+            'level': pdata.get('level', 1),
             'total_games': total_games,
             'wins': wins,
             'losses': losses,
