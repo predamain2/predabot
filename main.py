@@ -2360,7 +2360,87 @@ async def stats(interaction: discord.Interaction):
         win_rate = f"{win_rate_num:.0f}"
         avg_kills = (total_kills / total_games) if total_games > 0 else 0
 
-        # Map cards for template
+        # Calculate advanced statistics
+        rounds_played = total_games * 16  # Assuming average 16 rounds per match
+        kpr = (total_kills / rounds_played) if rounds_played > 0 else 0
+        
+        # Impact rating calculation (simplified)
+        impact = kd_ratio_num * 0.6 + (avg_kills / 20) * 0.4 if avg_kills > 0 else 0
+        
+        # SVR (Survival Rate) - simplified calculation
+        svr = ((total_kills - total_deaths) / total_games) if total_games > 0 else 0
+        svr = max(0, min(1, svr))  # Clamp between 0 and 1
+        
+        # Rating calculation (simplified HLTV-style)
+        rating = (kd_ratio_num * 0.5 + impact * 0.3 + (avg_kills / 15) * 0.2) if total_games > 0 else 1.0
+        
+        # Extract clan tag from name (everything before first space or #)
+        player_name = pdata.get('nick', 'Unknown')
+        clan_tag = None
+        if '#' in player_name:
+            parts = player_name.split('#', 1)
+            if len(parts) > 1:
+                clan_tag = parts[0].strip()
+                player_name = parts[1].strip()
+        elif ' ' in player_name:
+            parts = player_name.split(' ', 1)
+            if len(parts) > 1 and len(parts[0]) <= 5:  # Assume clan tags are short
+                clan_tag = parts[0]
+                player_name = parts[1]
+        
+        # Calculate level based on total games and performance
+        level = min(50, max(1, total_games // 2 + (wins // 5)))
+        level_progress = ((total_games % 2) * 50) + min(50, (wins % 5) * 10)
+        
+        # Calculate playtime (rough estimate: 15 min per game)
+        playtime_minutes = total_games * 15
+        playtime_hours = playtime_minutes // 60
+        playtime = f"{playtime_hours}h" if playtime_hours > 0 else f"{playtime_minutes}m"
+        
+        # Determine league based on ELO
+        elo = pdata.get('elo', 1000)
+        if elo >= 1800:
+            league = "Master"
+        elif elo >= 1600:
+            league = "Diamond"
+        elif elo >= 1400:
+            league = "Gold"
+        elif elo >= 1200:
+            league = "Silver"
+        else:
+            league = "Bronze"
+        
+        # Calculate MVP count (simplified: ~10% of wins)
+        mvp = max(1, wins // 10)
+        
+        # Generate leaderboard context
+        all_players = []
+        for pid, pinfo in player_data.items():
+            if pid != "dummy":
+                all_players.append({
+                    'name': pinfo.get('nick', 'Unknown'),
+                    'elo': pinfo.get('elo', 1000),
+                    'id': pid
+                })
+        
+        # Sort by ELO and find current player's rank
+        all_players.sort(key=lambda x: x['elo'], reverse=True)
+        current_rank = 1
+        for i, p in enumerate(all_players, 1):
+            if p['id'] == key:
+                current_rank = i
+                break
+        
+        # Create leaderboard with top 3 + current player
+        leaderboard = []
+        for i, p in enumerate(all_players[:3], 1):
+            leaderboard.append({'rank': str(i), 'name': p['name']})
+        
+        # Add current player if not in top 3
+        if current_rank > 3:
+            leaderboard.append({'rank': str(current_rank), 'name': player_data[key].get('nick', 'Unknown')})
+
+        # Enhanced map cards for template
         maps_list = []
         for m in per_map.values():
             games_on_map = m['wins'] + m['losses']
@@ -2368,6 +2448,8 @@ async def stats(interaction: discord.Interaction):
             wr_map = round((m['wins'] / games_on_map * 100), 0) if games_on_map > 0 else 0
             maps_list.append({
                 'name': m['name'],
+                'wins': m['wins'],
+                'losses': m['losses'],
                 'kd': f"{kd_map:.2f}" if m['deaths'] > 0 else f"{m['kills']}",
                 'win_rate': int(wr_map)
             })
@@ -2376,11 +2458,19 @@ async def stats(interaction: discord.Interaction):
         recent_symbols = recent_results[-30:]
 
         stats_data = {
-            'name': pdata.get('nick', 'Unknown'),
+            'name': player_name,
+            'clan_tag': clan_tag,
             'player_id': pdata.get('id', ''),
             'avatar_url': str(interaction.user.display_avatar.url),
+            'level': level,
+            'level_progress': level_progress,
+            'playtime': playtime,
+            'join_date': '11.07.2025',  # Default date, could be enhanced with actual registration date
+            'games': total_games,
+            'mvp': mvp,
+            'league': league,
+            'leaderboard': leaderboard,
             'points': pdata.get('elo', 1000),
-            'total_games': total_games,
             'wins': wins,
             'losses': losses,
             'kills': total_kills,
@@ -2388,6 +2478,10 @@ async def stats(interaction: discord.Interaction):
             'assists': total_assists,
             'avg': round(avg_kills, 1),
             'kd': kd_ratio,
+            'rating': f"{rating:.2f}",
+            'impact': f"{impact:.2f}",
+            'kpr': f"{kpr:.2f}",
+            'svr': f"{svr:.2f}",
             'win_rate': win_rate,
             'maps': maps_list,
             'recent': recent_symbols
