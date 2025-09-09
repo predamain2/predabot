@@ -511,14 +511,30 @@
 		.level-meter-info {
 			display: flex;
 			justify-content: space-between;
+			align-items: center;
 			font-size: 11px;
 			color: rgba(255,255,255,0.6);
-			margin-bottom: 4px;
+			margin-bottom: 8px;
+			padding: 0 4px;
+			gap: 20px;
 		}
 
 		.current-elo {
 			font-weight: 600;
 			color: #fff;
+			background: rgba(59, 130, 246, 0.1);
+			padding: 2px 6px;
+			border-radius: 4px;
+			border: 1px solid rgba(59, 130, 246, 0.2);
+		}
+
+		.next-elo {
+			font-weight: 500;
+			color: rgba(255,255,255,0.7);
+			background: rgba(255,255,255,0.05);
+			padding: 2px 6px;
+			border-radius: 4px;
+			border: 1px solid rgba(255,255,255,0.1);
 		}
 
 		.info-grid {
@@ -669,6 +685,20 @@
 			gap: 6px;
 		}
 
+		.no-matches {
+			padding: 20px;
+			text-align: center;
+			color: rgba(255,255,255,0.6);
+			font-style: italic;
+		}
+
+		.level-icon {
+			width: 20px;
+			height: 20px;
+			object-fit: cover;
+			border-radius: 2px;
+		}
+
 		/* Responsive design */
 		@media (max-width: 1200px) {
 			.dashboard {
@@ -755,48 +785,48 @@
 								<div class="stat-label">Rating</div>
 								<div class="stat-rating strong">Strong</div>
 							</div>
-							<div class="stat-value">{{ "%.2f"|format(stats.rating or 1.13) }}</div>
-							<div class="stat-bar" style="--progress: {{ ((stats.rating or 1.13) / 3.0 * 100)|round }}%"></div>
+							<div class="stat-value">{{ "%.2f"|format(stats.rating or 0) }}</div>
+							<div class="stat-bar" style="--progress: {{ ((stats.rating or 0) / 3.0 * 100)|round }}%"></div>
 						</div>
 						<div class="stat-card">
 							<div class="stat-header">
 								<div class="stat-label">AVG</div>
 								<div class="stat-rating strong">Strong</div>
 							</div>
-							<div class="stat-value">{{ stats.avg|default('18', true) }}</div>
-							<div class="stat-bar" style="--progress: {{ (stats.avg or 18) * 4 }}%"></div>
+							<div class="stat-value">{{ stats.avg|default('0', true) }}</div>
+							<div class="stat-bar" style="--progress: {{ (stats.avg or 0) * 4 }}%"></div>
 						</div>
 						<div class="stat-card">
 							<div class="stat-header">
 								<div class="stat-label">Impact</div>
 								<div class="stat-rating strong">Strong</div>
 							</div>
-							<div class="stat-value">{{ "%.2f"|format(stats.impact or 1.21) }}</div>
-							<div class="stat-bar" style="--progress: {{ ((stats.impact or 1.21) / 3.0 * 100)|round }}%"></div>
+							<div class="stat-value">{{ "%.2f"|format(stats.impact or 0) }}</div>
+							<div class="stat-bar" style="--progress: {{ ((stats.impact or 0) / 3.0 * 100)|round }}%"></div>
 						</div>
 						<div class="stat-card">
 							<div class="stat-header">
 								<div class="stat-label">KPR</div>
 								<div class="stat-rating strong">Strong</div>
 							</div>
-							<div class="stat-value">{{ "%.2f"|format(stats.kpr or 0.92) }}</div>
-							<div class="stat-bar" style="--progress: {{ ((stats.kpr or 0.92) * 100)|round }}%"></div>
+							<div class="stat-value">{{ "%.2f"|format(stats.kpr or 0) }}</div>
+							<div class="stat-bar" style="--progress: {{ ((stats.kpr or 0) * 100)|round }}%"></div>
 						</div>
 						<div class="stat-card">
 							<div class="stat-header">
 								<div class="stat-label">Assists</div>
 								<div class="stat-rating low">Low</div>
 							</div>
-							<div class="stat-value">{{ stats.assists|default('29', true) }}</div>
-							<div class="stat-bar" style="--progress: {{ (stats.assists or 29) * 2 }}%"></div>
+							<div class="stat-value">{{ stats.assists|default('0', true) }}</div>
+							<div class="stat-bar" style="--progress: {{ (stats.assists or 0) * 2 }}%"></div>
 						</div>
 						<div class="stat-card">
 							<div class="stat-header">
 								<div class="stat-label">SVR</div>
 								<div class="stat-rating stable">Stable</div>
 							</div>
-							<div class="stat-value">{{ "%.2f"|format(stats.svr or 0.32) }}</div>
-							<div class="stat-bar" style="--progress: {{ ((stats.svr or 0.32) * 100)|round }}%"></div>
+							<div class="stat-value">{{ "%.2f"|format(stats.svr or 0) }}</div>
+							<div class="stat-bar" style="--progress: {{ ((stats.svr or 0) * 100)|round }}%"></div>
 						</div>
 					</div>
 				</div>
@@ -812,13 +842,13 @@
 				</div>
 				<div class="map-section">
 					<div class="winrate-display">
-						<div class="winrate-circle" style="--winrate: {{ stats.win_rate or 50 }}">
-							<div class="winrate-value">{{ stats.win_rate|default('50', true) }}%</div>
+						<div class="winrate-circle" style="--winrate: {{ stats.win_rate or 0 }}">
+							<div class="winrate-value">{{ stats.win_rate|default('0', true) }}%</div>
 						</div>
 						<div class="winrate-label">Win Rate</div>
 						<div class="wl-breakdown">
-							<div class="wl-stat wins">W {{ stats.wins|default('5', true) }}</div>
-							<div class="wl-stat losses">L {{ stats.losses|default('5', true) }}</div>
+							<div class="wl-stat wins">W {{ stats.wins|default('0', true) }}</div>
+							<div class="wl-stat losses">L {{ stats.losses|default('0', true) }}</div>
 						</div>
 					</div>
 					<div class="map-grid">
@@ -860,7 +890,7 @@
 						<div class="level-meter">
 							<div class="level-meter-info">
 								<span class="current-elo">{{ stats.elo|default('100', true) }} ELO</span>
-								<span>{{ stats.elo_next|default('501', true) }} ELO</span>
+								<span class="next-elo">{{ stats.elo_next|default('501', true) }} ELO</span>
 							</div>
 							<div class="level-progress">
 								<div class="level-progress-bar level-{{ stats.level|default('1', true) }}" style="--level-progress: {{ stats.level_progress|default('0', true) }}%"></div>
@@ -894,7 +924,7 @@
 						</svg>
 						<div class="info-text">
 							<div class="info-label">Games</div>
-							<div class="info-value">{{ stats.games|default('10', true) }}</div>
+							<div class="info-value">{{ stats.games|default('0', true) }}</div>
 						</div>
 					</div>
 					<div class="info-item">
@@ -903,7 +933,7 @@
 						</svg>
 						<div class="info-text">
 							<div class="info-label">MVP</div>
-							<div class="info-value">{{ stats.mvp|default('2', true) }}</div>
+							<div class="info-value">{{ stats.mvp|default('0', true) }}</div>
 						</div>
 					</div>
 				</div>
@@ -917,17 +947,18 @@
 
 				<div class="leaderboard">
 					<div class="leaderboard-header">
-						<img class="af-logo" src="logo.png" alt="AF Logo">
+						<img class="af-logo" src="logo.png" alt="Logo">
 						<div class="leaderboard-title">Leaderboard</div>
 					</div>
 					{% for player in stats.leaderboard or [
-						{'rank': '1', 'name': 'f3ktori', 'avatar': ''},
-						{'rank': '2', 'name': 'wohayo', 'avatar': ''},
-						{'rank': '3', 'name': 'NoName77', 'avatar': ''},
-						{'rank': '712', 'name': stats.name|default('imdone', true), 'avatar': stats.avatar_url|default('', true)}
+						{'rank': '1', 'name': 'f3ktori', 'avatar': '', 'elo': 1500, 'level': 8},
+						{'rank': '2', 'name': 'wohayo', 'avatar': '', 'elo': 1200, 'level': 6},
+						{'rank': '3', 'name': 'NoName77', 'avatar': '', 'elo': 1000, 'level': 4},
+						{'rank': '712', 'name': stats.name|default('imdone', true), 'avatar': stats.avatar_url|default('', true), 'elo': stats.elo|default(100, true), 'level': stats.level|default(1, true)}
 					] %}
 					<div class="leaderboard-item">
 						<div class="rank-number">#{{ player.rank }}</div>
+						<img class="level-icon" src="level_icons/{{ player.level|default(1, true) }}.png" alt="Level {{ player.level|default(1, true) }}" data-elo="{{ player.elo|default(100, true) }}" onerror="this.style.display='none';">
 						<img class="player-avatar" src="{{ player.avatar|default('', true) }}" alt="{{ player.name }} Avatar" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
 						<div class="player-avatar" style="display: none;"></div>
 						<div class="player-name-small">{{ player.name }}</div>
@@ -944,16 +975,22 @@
 					</svg>
 					Recent Matches
 				</div>
+				{% if stats.recent and stats.recent|length > 0 %}
 				<div class="matches-grid">
-					{% for r in (stats.recent or ['L', 'L', 'W', 'L', 'W', 'L', 'W'])[:7] %}
+					{% for r in stats.recent[:7] %}
 					<div class="match-result {% if r == 'W' %}win{% else %}loss{% endif %}">{{ r }}</div>
 					{% endfor %}
 				</div>
-				{% if (stats.recent|length or 7) > 7 %}
+				{% if stats.recent|length > 7 %}
 				<div class="matches-overflow">
-					{% for r in (stats.recent or ['W', 'W', 'L'])[7:10] %}
+					{% for r in stats.recent[7:10] %}
 					<div class="match-result {% if r == 'W' %}win{% else %}loss{% endif %}">{{ r }}</div>
 					{% endfor %}
+				</div>
+				{% endif %}
+				{% else %}
+				<div class="no-matches">
+					<p>No matches played yet</p>
 				</div>
 				{% endif %}
 			</div>
@@ -993,6 +1030,12 @@
 			};
 		}
 
+		function getLevelFromElo(elo) {
+			// Same logic as config.get_level_from_elo
+			const tier = ELO_TIERS.find(tier => elo >= tier.min && elo <= tier.max);
+			return tier ? tier.level : 1;
+		}
+
 		// Update level display on page load
 		document.addEventListener('DOMContentLoaded', function() {
 			// Get ELO from template or use default
@@ -1010,16 +1053,29 @@
 				}
 				
 				// Update next ELO display
-				const nextEloElement = document.querySelector('.level-meter-info span:last-child');
+				const nextEloElement = document.querySelector('.next-elo');
 				if (nextEloElement && levelData.level < 10) {
 					nextEloElement.textContent = levelData.nextElo + ' ELO';
 				} else if (nextEloElement && levelData.level === 10) {
 					nextEloElement.textContent = 'MAX LEVEL';
+					nextEloElement.style.background = 'rgba(34, 197, 94, 0.1)';
+					nextEloElement.style.borderColor = 'rgba(34, 197, 94, 0.2)';
+					nextEloElement.style.color = '#22c55e';
 				}
 			}
+
+			// Update leaderboard level icons based on ELO (if ELO data is available)
+			const leaderboardItems = document.querySelectorAll('.leaderboard-item');
+			leaderboardItems.forEach(item => {
+				const levelIcon = item.querySelector('.level-icon');
+				if (levelIcon && levelIcon.dataset.elo) {
+					const elo = parseInt(levelIcon.dataset.elo);
+					const level = getLevelFromElo(elo);
+					levelIcon.src = `level_icons/${level}.png`;
+					levelIcon.alt = `Level ${level}`;
+				}
+			});
 		});
 	</script>
 </body>
 </html>
-
-
