@@ -31,7 +31,7 @@
 			width: 100%;
 			max-width: 1280px;
 			display: grid;
-			grid-template-columns: 2fr 1fr;
+			grid-template-columns: 3fr 1.2fr; /* tighter ratio for desktop */
 			gap: 20px;
 		}
 
@@ -46,7 +46,7 @@
 			grid-column: 1 / -1;
 			padding: 18px 20px;
 			display: grid;
-			grid-template-columns: 80px minmax(0, 1fr); /* removed 3rd column */
+			grid-template-columns: 80px 1fr auto; /* auto instead of wide fixed col */
 			gap: 16px;
 			align-items: center;
 		}
@@ -67,22 +67,22 @@
 		}
 
 		.header-stats {
-			display: flex;
-			gap: 10px;
-			margin-top: 8px;
-			justify-content: flex-start; /* align left */
+			display: flex; /* pills inline */
+			gap: 12px;
+			justify-content: flex-end;
+			width: auto;
 		}
 
 		.header-pill {
 			background: rgba(255,255,255,0.03);
 			border: 1px solid rgba(255,255,255,0.08);
 			border-radius: 10px;
-			padding: 6px 10px;
+			padding: 10px 12px;
 			text-align: center;
 		}
 
-		.header-pill .label { font-size: 10px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px; }
-		.header-pill .value { font-size: 16px; font-weight: 800; margin-top: 2px; }
+		.header-pill .label { font-size: 11px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px; }
+		.header-pill .value { font-size: 18px; font-weight: 800; margin-top: 4px; }
 
 		.grid-2 {
 			display: grid;
@@ -93,7 +93,12 @@
 		.panel { padding: 16px; }
 		.panel-title { font-weight: 700; font-size: 14px; letter-spacing: 1px; color: rgba(255,255,255,0.7); text-transform: uppercase; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
 
-		.stats-area { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; }
+		.stats-area {
+			display: grid;
+			grid-template-columns: 160px 1fr; /* donut + flexible side */
+			gap: 16px;
+			align-items: start;
+		}
 
 		.kd-ring { width: 160px; height: 160px; border-radius: 50%; background:
 			radial-gradient(closest-side, #0f0f12 72%, transparent 74% 100%),
@@ -114,7 +119,12 @@
 		.bar::after { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: var(--w, 0%); background: linear-gradient(90deg, #ff2d55, #7c3aed); }
 
 		.map-panel { margin-top: 16px; }
-		.map-grid { display: grid; grid-template-columns: 220px 1fr; gap: 16px; }
+		.map-grid {
+			display: grid;
+			grid-template-columns: 200px 1fr; /* less empty space */
+			gap: 16px;
+			align-items: start;
+		}
 		.map-donut { --p: {{ stats.win_rate or 0 }}; width: 120px; height: 120px; border-radius: 50%; background:
 			radial-gradient(closest-side, #0f0f12 72%, transparent 74% 100%),
 			conic-gradient(#7c3aed calc(var(--p) * 1%), rgba(255,255,255,0.08) 0);
@@ -138,7 +148,7 @@
 		@media (max-width: 1100px) {
 			.page { grid-template-columns: 1fr; }
 			.header-card { grid-template-columns: 80px 1fr; }
-			.header-stats { justify-self: start; width: auto; }
+			.header-stats { justify-self: start; width: auto; display: grid; }
 		}
 
 		@media (max-width: 900px) {
@@ -160,12 +170,9 @@
 			<div class="player-meta">
 				<h2>{{ stats.name|default('Player', true) }}<img class="level-badge" src="level_icons/{{ stats.level or 1 }}.png" alt="Lvl"></h2>
 				<div class="sub">ID: {{ stats.player_id|default('-', true) }}</div>
-				<div class="header-stats">
-					<div class="header-pill">
-						<div class="label">Points</div>
-						<div class="value">{{ stats.points|default(0, true) }}</div>
-					</div>
-				</div>
+			</div>
+			<div class="header-stats">
+				<div class="header-pill"><div class="label">Points</div><div class="value">{{ stats.points|default(0, true) }}</div></div>
 			</div>
 		</div>
 
@@ -175,7 +182,7 @@
 					<div class="panel-title">Statistic</div>
 					<div class="stats-area">
 						<div>
-							<div class="kd-ring" style="--killsP: {{ (stats.kills / (stats.kills + stats.deaths) * 100) if (stats.kills + stats.deaths) > 0 else 0 }}%">
+							<div class="kd-ring" style="--killsP: {{ (stats.kills / (stats.kills + stats.deaths) * 100) if (stats.kills + stats.deaths) > 0 else 0 }}">
 								<div class="inner"></div>
 								<div class="text">{{ stats.kd|default(0, true) }}</div>
 							</div>
