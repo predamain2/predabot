@@ -111,10 +111,21 @@ def owner_only():
     """Slash-command check: allow only users with Owner role configured in config.py"""
     async def predicate(interaction: discord.Interaction) -> bool:
         owner_role_id = int(getattr(config, 'OWNER_ROLE_ID', 0) or 0)
+        user_role_ids = [getattr(r, 'id', 0) for r in getattr(interaction.user, 'roles', [])]
+        
+        # Debug logging
+        print(f"Owner check - User: {interaction.user.id}, Owner Role ID: {owner_role_id}")
+        print(f"User roles: {user_role_ids}")
+        print(f"Has owner role: {owner_role_id in user_role_ids}")
+        
         if owner_role_id == 0:
             # If not configured, fall back to guild owner only
-            return interaction.user.id == interaction.guild.owner_id
-        return any(getattr(r, 'id', 0) == owner_role_id for r in getattr(interaction.user, 'roles', []))
+            is_guild_owner = interaction.user.id == interaction.guild.owner_id
+            print(f"Fallback to guild owner: {is_guild_owner}")
+            return is_guild_owner
+        
+        has_owner_role = owner_role_id in user_role_ids
+        return has_owner_role
     return discord.app_commands.check(predicate)
 def is_player_timed_out(user_id):
     """Check if a player is currently timed out"""
@@ -3002,6 +3013,71 @@ async def reset_season(interaction: discord.Interaction):
         )
         await interaction.edit_original_response(embed=error_embed, view=None)
         print(f"Error in reset_season command: {str(e)}")
+
+@bot.tree.command(name="sync_commands", description="Sync slash commands to Discord (Owner only)")
+@owner_only()
+async def sync_commands(interaction: discord.Interaction):
+    """Sync slash commands to Discord"""
+    await interaction.response.defer(ephemeral=True)
+    
+    try:
+        synced = await bot.tree.sync()
+        await interaction.followup.send(f"✅ Synced {len(synced)} commands to Discord!", ephemeral=True)
+        print(f"Synced {len(synced)} commands")
+    except Exception as e:
+        await interaction.followup.send(f"❌ Failed to sync commands: {str(e)}", ephemeral=True)
+        print(f"Error syncing commands: {str(e)}")
+
+@bot.tree.command(name="check_permissions", description="Check your permissions and role IDs")
+async def check_permissions(interaction: discord.Interaction):
+    """Debug command to check user permissions"""
+    await interaction.response.defer(ephemeral=True)
+    
+    owner_role_id = int(getattr(config, 'OWNER_ROLE_ID', 0) or 0)
+    user_role_ids = [r.id for r in interaction.user.roles]
+    
+    embed = discord.Embed(
+        title="🔍 Permission Debug Info",
+        color=discord.Color.blue()
+    )
+    
+    embed.add_field(
+        name="Your User ID",
+        value=f"`{interaction.user.id}`",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="Expected Owner Role ID",
+        value=f"`{owner_role_id}`",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="Your Role IDs",
+        value=f"`{user_role_ids}`",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="Has Owner Role",
+        value="✅ Yes" if owner_role_id in user_role_ids else "❌ No",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="Is Guild Owner",
+        value="✅ Yes" if interaction.user.id == interaction.guild.owner_id else "❌ No",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="Is Administrator",
+        value="✅ Yes" if interaction.user.guild_permissions.administrator else "❌ No",
+        inline=False
+    )
+    
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 if __name__ == '__main__':
