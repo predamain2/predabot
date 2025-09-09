@@ -1563,12 +1563,17 @@ async def on_message(message: discord.Message):
         for p in players_list:
             p_copy = dict(p)
             # pull current ELO from players database at submission time
-            for v in player_data.values():
+            for v_discord_id, v in player_data.items():
                 if v.get("nick", "").lower() == p_copy.get("name", "").lower():
                     p_copy["elo"] = int(v.get("elo", config.DEFAULT_ELO))
+                    # store discord id snapshot to allow future stats by ID even if name changes
+                    p_copy["discord_id"] = str(v_discord_id)
                     break
             if "elo" not in p_copy:
                 p_copy["elo"] = int(config.DEFAULT_ELO)
+            if "discord_id" not in p_copy:
+                # best-effort: leave empty; legacy entries will be name-matched
+                p_copy["discord_id"] = None
             snap.append(p_copy)
         return snap
 
@@ -2286,36 +2291,84 @@ async def stats(interaction: discord.Interaction):
             await interaction.followup.send('❌ You are not registered. Use `/register` first.', ephemeral=True)
             return
         
-        # Calculate basic stats
-        wins = pdata.get('wins', 0)
-        losses = pdata.get('losses', 0)
+        # Calculate stats strictly by Discord ID to avoid name-change issues
+        discord_id = key
+        wins = int(pdata.get('wins', 0))
+        losses = int(pdata.get('losses', 0))
         total_games = wins + losses
-        
-        # Calculate kills and deaths from results.json
-        total_kills, total_deaths = 0, 0
-        player_name = pdata.get('nick', '').lower()
-        for match in results_data.values():
+
+        total_kills = 0
+        total_deaths = 0
+        total_assists = 0
+        per_map = {}
+        recent_results = []
+
+        for match in load_results().values():
+            map_name = match.get('map', 'Unknown')
+            outcome = None
+
             for team_key in ['winning_team', 'losing_team']:
-                for player in match.get(team_key, []):
-                    if player.get('name', '').lower() == player_name:
-                        total_kills += player.get('kills', 0)
-                        total_deaths += player.get('deaths', 0)
-                        
-        win_rate = f"{(wins / total_games * 100):.1f}" if total_games > 0 else "0"
-        kd_ratio = f"{(total_kills / total_deaths):.2f}" if total_deaths > 0 else str(total_kills)
-        
-        # Prepare stats data
+                for p in match.get(team_key, []) or []:
+                    # Prefer discord_id snapshot; fallback to nickname match for legacy entries
+                    p_id = str(p.get('discord_id')) if p.get('discord_id') is not None else None
+                    name_match = (str(p.get('name', '')).lower() == str(pdata.get('nick','')).lower())
+                    if p_id == discord_id or (p_id in (None, 'None', '') and name_match):
+                        k = int(p.get('kills', 0))
+                        d = int(p.get('deaths', 0))
+                        a = int(p.get('assists', 0))
+                        total_kills += k
+                        total_deaths += d
+                        total_assists += a
+                        per_map.setdefault(map_name, {'name': map_name, 'kills': 0, 'deaths': 0, 'wins': 0, 'losses': 0})
+                        per_map[map_name]['kills'] += k
+                        per_map[map_name]['deaths'] += d
+                        if team_key == 'winning_team':
+                            per_map[map_name]['wins'] += 1
+                            outcome = 'W'
+                        else:
+                            per_map[map_name]['losses'] += 1
+                            outcome = 'L'
+
+            if outcome is not None:
+                recent_results.append(outcome)
+
+        # Derive extra numbers
+        kd_ratio_num = (total_kills / total_deaths) if total_deaths > 0 else float(total_kills)
+        kd_ratio = f"{kd_ratio_num:.2f}" if total_deaths > 0 else f"{total_kills}"
+        win_rate_num = (wins / total_games * 100) if total_games > 0 else 0.0
+        win_rate = f"{win_rate_num:.0f}"
+        avg_kills = (total_kills / total_games) if total_games > 0 else 0
+
+        # Map cards for template
+        maps_list = []
+        for m in per_map.values():
+            games_on_map = m['wins'] + m['losses']
+            kd_map = (m['kills'] / m['deaths']) if m['deaths'] > 0 else (m['kills'])
+            wr_map = round((m['wins'] / games_on_map * 100), 0) if games_on_map > 0 else 0
+            maps_list.append({
+                'name': m['name'],
+                'kd': f"{kd_map:.2f}" if m['deaths'] > 0 else f"{m['kills']}",
+                'win_rate': int(wr_map)
+            })
+
+        # Cap recent to 30 like the reference grid
+        recent_symbols = recent_results[-30:]
+
         stats_data = {
-            'nickname': pdata.get('nick', 'Unknown'),
-            'level': pdata.get('level', 0),
+            'name': pdata.get('nick', 'Unknown'),
+            'player_id': pdata.get('id', ''),
             'points': pdata.get('elo', 1000),
             'total_games': total_games,
             'wins': wins,
             'losses': losses,
             'kills': total_kills,
             'deaths': total_deaths,
+            'assists': total_assists,
+            'avg': round(avg_kills, 1),
             'kd': kd_ratio,
-            'win_rate': win_rate
+            'win_rate': win_rate,
+            'maps': maps_list,
+            'recent': recent_symbols
         }
         
         # Generate HTML and render to image
@@ -2328,7 +2381,7 @@ async def stats(interaction: discord.Interaction):
         async with async_playwright() as p:
             browser = await p.chromium.launch()
             page = await browser.new_page()
-            await page.set_viewport_size({'width': 1000, 'height': 800})
+            await page.set_viewport_size({'width': 1280, 'height': 900})
             await page.goto('file://' + os.path.abspath(temp_html))
             await page.wait_for_load_state('networkidle')
             await asyncio.sleep(0.5)
