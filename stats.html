@@ -14,6 +14,7 @@
 			padding: 0;
 		}
 
+		/* Main layout - closer to the reference UI */
 		body {
 			background: radial-gradient(1000px 500px at 80% -10%, rgba(220, 20, 60, 0.25), transparent 60%),
 				radial-gradient(1000px 500px at 10% 110%, rgba(124, 58, 237, 0.25), transparent 60%),
@@ -31,7 +32,7 @@
 			width: 100%;
 			max-width: 1280px;
 			display: grid;
-			grid-template-columns: 3fr 1.2fr; /* tighter ratio for desktop */
+			grid-template-columns: 2fr 1fr;
 			gap: 20px;
 		}
 
@@ -46,7 +47,7 @@
 			grid-column: 1 / -1;
 			padding: 18px 20px;
 			display: grid;
-			grid-template-columns: 80px 1fr auto; /* auto instead of wide fixed col */
+			grid-template-columns: 80px minmax(0, 1fr) minmax(280px, 460px);
 			gap: 16px;
 			align-items: center;
 		}
@@ -67,10 +68,11 @@
 		}
 
 		.header-stats {
-			display: flex; /* pills inline */
+			display: grid;
+			grid-template-columns: 1fr;
 			gap: 12px;
-			justify-content: flex-end;
-			width: auto;
+			justify-self: end;
+			width: 100%;
 		}
 
 		.header-pill {
@@ -93,12 +95,7 @@
 		.panel { padding: 16px; }
 		.panel-title { font-weight: 700; font-size: 14px; letter-spacing: 1px; color: rgba(255,255,255,0.7); text-transform: uppercase; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
 
-		.stats-area {
-			display: grid;
-			grid-template-columns: 160px 1fr; /* donut + flexible side */
-			gap: 16px;
-			align-items: start;
-		}
+		.stats-area { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; }
 
 		.kd-ring { width: 160px; height: 160px; border-radius: 50%; background:
 			radial-gradient(closest-side, #0f0f12 72%, transparent 74% 100%),
@@ -119,12 +116,7 @@
 		.bar::after { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: var(--w, 0%); background: linear-gradient(90deg, #ff2d55, #7c3aed); }
 
 		.map-panel { margin-top: 16px; }
-		.map-grid {
-			display: grid;
-			grid-template-columns: 200px 1fr; /* less empty space */
-			gap: 16px;
-			align-items: start;
-		}
+		.map-grid { display: grid; grid-template-columns: 220px 1fr; gap: 16px; }
 		.map-donut { --p: {{ stats.win_rate or 0 }}; width: 120px; height: 120px; border-radius: 50%; background:
 			radial-gradient(closest-side, #0f0f12 72%, transparent 74% 100%),
 			conic-gradient(#7c3aed calc(var(--p) * 1%), rgba(255,255,255,0.08) 0);
@@ -148,7 +140,7 @@
 		@media (max-width: 1100px) {
 			.page { grid-template-columns: 1fr; }
 			.header-card { grid-template-columns: 80px 1fr; }
-			.header-stats { justify-self: start; width: auto; display: grid; }
+			.header-stats { justify-self: start; width: auto; }
 		}
 
 		@media (max-width: 900px) {
