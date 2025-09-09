@@ -106,6 +106,16 @@ def staff_mod_owner_only():
             return interaction.user.guild_permissions.administrator
         return any(getattr(r, 'id', 0) in role_ids for r in getattr(interaction.user, 'roles', []))
     return discord.app_commands.check(predicate)
+
+def owner_only():
+    """Slash-command check: allow only users with Owner role configured in config.py"""
+    async def predicate(interaction: discord.Interaction) -> bool:
+        owner_role_id = int(getattr(config, 'OWNER_ROLE_ID', 0) or 0)
+        if owner_role_id == 0:
+            # If not configured, fall back to guild owner only
+            return interaction.user.id == interaction.guild.owner_id
+        return any(getattr(r, 'id', 0) == owner_role_id for r in getattr(interaction.user, 'roles', []))
+    return discord.app_commands.check(predicate)
 def is_player_timed_out(user_id):
     """Check if a player is currently timed out"""
     current_time = time.time()
@@ -2803,6 +2813,195 @@ async def remove_timeout(interaction: discord.Interaction, player: discord.Membe
         await interaction.response.send_message(f"✅ Timeout removed for {player.display_name}", ephemeral=True)
     else:
         await interaction.response.send_message(f"❌ {player.display_name} is not timed out", ephemeral=True)
+
+@bot.tree.command(name="reset_season", description="Reset all player stats and clear match data (Owner only)")
+@owner_only()
+async def reset_season(interaction: discord.Interaction):
+    """Reset all player stats, revert roles to level 1, and clear match data"""
+    await interaction.response.defer(ephemeral=True)
+    
+    try:
+        guild = interaction.guild
+        if not guild:
+            await interaction.followup.send("❌ This command can only be used in a server.", ephemeral=True)
+            return
+        
+        # Confirmation embed
+        embed = discord.Embed(
+            title="⚠️ Season Reset Confirmation",
+            description="This will **permanently**:\n"
+                       "• Reset all player ELO to 100\n"
+                       "• Reset all wins/losses to 0\n"
+                       "• Revert all players to Level 1 roles\n"
+                       "• Clear all match results\n"
+                       "• Clear all party data\n"
+                       "• Clear all match history\n\n"
+                       "**This action cannot be undone!**",
+            color=discord.Color.red()
+        )
+        
+        # Create confirmation view
+        class ConfirmResetView(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=60.0)
+                self.confirmed = False
+            
+            @discord.ui.button(label="✅ CONFIRM RESET", style=discord.ButtonStyle.danger)
+            async def confirm_reset(self, button_interaction: discord.Interaction, button: discord.ui.Button):
+                if button_interaction.user.id != interaction.user.id:
+                    await button_interaction.response.send_message("❌ Only the command user can confirm this action.", ephemeral=True)
+                    return
+                
+                self.confirmed = True
+                await button_interaction.response.defer()
+                self.stop()
+            
+            @discord.ui.button(label="❌ Cancel", style=discord.ButtonStyle.secondary)
+            async def cancel_reset(self, button_interaction: discord.Interaction, button: discord.ui.Button):
+                if button_interaction.user.id != interaction.user.id:
+                    await button_interaction.response.send_message("❌ Only the command user can cancel this action.", ephemeral=True)
+                    return
+                
+                await button_interaction.response.send_message("✅ Season reset cancelled.", ephemeral=True)
+                self.stop()
+        
+        view = ConfirmResetView()
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+        
+        # Wait for confirmation
+        await view.wait()
+        
+        if not view.confirmed:
+            return
+        
+        # Start the reset process
+        reset_embed = discord.Embed(
+            title="🔄 Resetting Season...",
+            description="Please wait while the season is being reset...",
+            color=discord.Color.orange()
+        )
+        await interaction.edit_original_response(embed=reset_embed, view=None)
+        
+        reset_stats = {
+            "players_reset": 0,
+            "roles_updated": 0,
+            "files_cleared": 0,
+            "errors": []
+        }
+        
+        # 1. Reset all player stats and roles
+        level1_role = guild.get_role(config.ROLE_LEVELS.get(1))
+        
+        for user_id, player_info in player_data.items():
+            try:
+                # Reset player stats
+                player_data[user_id].update({
+                    "elo": config.DEFAULT_ELO,
+                    "level": 1,
+                    "wins": 0,
+                    "losses": 0
+                })
+                reset_stats["players_reset"] += 1
+                
+                # Update Discord roles
+                member = guild.get_member(int(user_id))
+                if member:
+                    try:
+                        # Remove all level roles (2-10)
+                        roles_to_remove = []
+                        for level in range(2, 11):
+                            role = guild.get_role(config.ROLE_LEVELS.get(level))
+                            if role and role in member.roles:
+                                roles_to_remove.append(role)
+                        
+                        if roles_to_remove:
+                            await member.remove_roles(*roles_to_remove)
+                        
+                        # Add level 1 role if not present
+                        if level1_role and level1_role not in member.roles:
+                            await member.add_roles(level1_role)
+                        
+                        reset_stats["roles_updated"] += 1
+                        
+                    except Exception as e:
+                        reset_stats["errors"].append(f"Role update failed for {player_info.get('nick', user_id)}: {str(e)}")
+                        
+            except Exception as e:
+                reset_stats["errors"].append(f"Player reset failed for {user_id}: {str(e)}")
+        
+        # Save updated player data
+        save_players()
+        
+        # 2. Clear JSON files
+        files_to_clear = ["results.json", "parties.json", "matches.json"]
+        
+        for filename in files_to_clear:
+            try:
+                if os.path.exists(filename):
+                    with open(filename, 'w') as f:
+                        json.dump({}, f, indent=2)
+                    reset_stats["files_cleared"] += 1
+            except Exception as e:
+                reset_stats["errors"].append(f"Failed to clear {filename}: {str(e)}")
+        
+        # 3. Clear global variables
+        global results_data, parties_data
+        results_data = {}
+        parties_data = {}
+        
+        # Create success embed
+        success_embed = discord.Embed(
+            title="✅ Season Reset Complete!",
+            color=discord.Color.green()
+        )
+        
+        success_embed.add_field(
+            name="📊 Reset Statistics",
+            value=f"• **{reset_stats['players_reset']}** players reset to Level 1\n"
+                  f"• **{reset_stats['roles_updated']}** Discord roles updated\n"
+                  f"• **{reset_stats['files_cleared']}** data files cleared",
+            inline=False
+        )
+        
+        if reset_stats["errors"]:
+            error_text = "\n".join(reset_stats["errors"][:5])  # Show first 5 errors
+            if len(reset_stats["errors"]) > 5:
+                error_text += f"\n... and {len(reset_stats['errors']) - 5} more errors"
+            
+            success_embed.add_field(
+                name="⚠️ Errors Encountered",
+                value=f"```{error_text}```",
+                inline=False
+            )
+        
+        success_embed.add_field(
+            name="🎮 New Season Started",
+            value="All players now start fresh with:\n"
+                  "• **100 ELO** (Level 1)\n"
+                  "• **0 wins, 0 losses**\n"
+                  "• **Clean match history**",
+            inline=False
+        )
+        
+        await interaction.edit_original_response(embed=success_embed, view=None)
+        
+        # Update leaderboard
+        try:
+            from commands import General
+            cog = bot.get_cog('General')
+            if cog and guild:
+                await cog.post_leaderboard(guild)
+        except Exception as e:
+            print(f"Failed to update leaderboard after reset: {e}")
+        
+    except Exception as e:
+        error_embed = discord.Embed(
+            title="❌ Season Reset Failed",
+            description=f"An error occurred during the reset process:\n```{str(e)}```",
+            color=discord.Color.red()
+        )
+        await interaction.edit_original_response(embed=error_embed, view=None)
+        print(f"Error in reset_season command: {str(e)}")
 
 
 if __name__ == '__main__':
