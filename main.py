@@ -74,6 +74,19 @@ def load_timeouts():
 COMMANDS_CHANNEL_ID = 1391548335478800494  # The channel where party messages are sent
 TIMEOUT_DURATION = 300  # 5 minutes in seconds
 
+# ---------- Lobby mapping ----------
+def get_lobby_text_channel_id(voice_channel_id):
+    """Get the corresponding text channel ID for a lobby voice channel."""
+    if voice_channel_id == config.LOBBY_VOICE_CHANNEL_ID:
+        return config.LOBBY_TEXT_CHANNEL_ID
+    elif voice_channel_id == config.LOBBY2_VOICE_CHANNEL_ID:
+        return config.LOBBY2_TEXT_CHANNEL_ID
+    return None
+
+def is_lobby_voice_channel(voice_channel_id):
+    """Check if a voice channel ID is a lobby voice channel."""
+    return voice_channel_id in [config.LOBBY_VOICE_CHANNEL_ID, config.LOBBY2_VOICE_CHANNEL_ID]
+
 # ---------- In-memory DB ----------
 player_data = load_players()       # keyed by string id
 party_data = load_parties()        # keyed by leader_id -> {members: [member_ids], team: None}
@@ -605,10 +618,10 @@ class DraftView(View):
                 await interaction.response.send_message("You already voted to rehost.", ephemeral=True, delete_after=5)
                 return
 
-            # Must be in lobby voice channel
-            vc = interaction.guild.get_channel(config.LOBBY_VOICE_CHANNEL_ID)
-            if not vc or interaction.user not in vc.members:
-                await interaction.response.send_message("Join the lobby voice to vote.", ephemeral=True, delete_after=5)
+            # Must be in a lobby voice channel
+            user_voice_channel = interaction.user.voice.channel if interaction.user.voice else None
+            if not user_voice_channel or not is_lobby_voice_channel(user_voice_channel.id):
+                await interaction.response.send_message("Join a lobby voice channel to vote.", ephemeral=True, delete_after=5)
                 return
 
             # Record vote
@@ -824,7 +837,18 @@ def build_roster_embed(st):
 async def rehost_picking(channel: discord.TextChannel, previous_captains):
     """Re-select captains while respecting party logic, then restart picking with the same lobby members."""
     try:
-        vc = channel.guild.get_channel(config.LOBBY_VOICE_CHANNEL_ID)
+        # Find which lobby voice channel this text channel corresponds to
+        lobby_voice_id = None
+        if channel.id == config.LOBBY_TEXT_CHANNEL_ID:
+            lobby_voice_id = config.LOBBY_VOICE_CHANNEL_ID
+        elif channel.id == config.LOBBY2_TEXT_CHANNEL_ID:
+            lobby_voice_id = config.LOBBY2_VOICE_CHANNEL_ID
+        
+        if not lobby_voice_id:
+            await channel.send("⚠️ Rehost failed: Could not determine lobby voice channel.")
+            return
+            
+        vc = channel.guild.get_channel(lobby_voice_id)
         if not vc:
             await channel.send("⚠️ Rehost failed: Lobby voice channel not found.")
             return
@@ -1472,7 +1496,7 @@ async def on_message(message: discord.Message):
     player_elo_changes = {}
 
     for p in winner_team:
-        for k, v in player_data.items():
+        for k, v in list(player_data.items()):
             if v["nick"].lower() == p["name"].lower():
                 # Skip leavers as they're handled separately
                 if not (p.get('was_absent', False) or (p.get('kills', 0) == 0 and p.get('deaths', 0) >= 10)):
@@ -1525,7 +1549,7 @@ async def on_message(message: discord.Message):
                             pass
 
     for p in loser_team:
-        for k, v in player_data.items():
+        for k, v in list(player_data.items()):
             if v["nick"].lower() == p["name"].lower():
                 # Skip leavers as they're handled separately
                 if not (p.get('was_absent', False) or (p.get('kills', 0) == 0 and p.get('deaths', 0) >= 10)):
@@ -1589,7 +1613,7 @@ async def on_message(message: discord.Message):
             p['elo_change'] = -20
             
             # Update player data
-            for k, v in player_data.items():
+            for k, v in list(player_data.items()):
                 if v["nick"].lower() == p["name"].lower():
                     current_elo = v.get("elo", config.DEFAULT_ELO)
                     v["elo"] = current_elo - 20  # Allow ELO to go below default
@@ -1837,78 +1861,110 @@ async def on_ready():
         print("Failed to find guild!")
         return
 
-    # Post initial leaderboard
+    # Post initial leaderboard in background
     cog = bot.get_cog('General')
     if cog:
         print("Posting initial leaderboard...")
-        await cog.post_leaderboard(guild)
-        print("Posted initial leaderboard")
+        # Run leaderboard posting in background to not block startup
+        async def post_initial_leaderboard():
+            try:
+                await cog.post_leaderboard(guild)
+                print("Posted initial leaderboard")
+            except Exception as e:
+                print(f"Failed to post initial leaderboard: {e}")
+        
+        asyncio.create_task(post_initial_leaderboard())
     else:
         print("General cog not found!")
 
-    # Update all registered players' nicknames
-    for k, v in player_data.items():
-        member = guild.get_member(int(k))
-        if member:
-            try:
-                await member.edit(nick=v['nick'])
-            except Exception:
-                pass
+    # Update all registered players' nicknames (run in background)
+    async def update_nicknames():
+        # Create a copy of items to avoid "dictionary changed size during iteration" error
+        for k, v in list(player_data.items()):
+            member = guild.get_member(int(k))
+            if member:
+                try:
+                    await member.edit(nick=v['nick'])
+                except Exception:
+                    pass
+    
+    # Start nickname updates in background
+    asyncio.create_task(update_nicknames())
         
-    # Sync commands with Discord
+    # Sync commands with Discord (optimized)
     print("Syncing commands...")
     try:
         if guild:
-            # First clear all commands to ensure clean slate
-            bot.tree.clear_commands(guild=guild)
-            # Then sync both global and guild commands
-            await bot.tree.sync()
-            await bot.tree.sync(guild=guild)
+            # Sync commands with timeout
+            await asyncio.wait_for(bot.tree.sync(), timeout=10.0)
+            await asyncio.wait_for(bot.tree.sync(guild=guild), timeout=10.0)
             print("Commands synced successfully!")
         else:
             print("Failed to find guild for command sync")
+    except asyncio.TimeoutError:
+        print("Command sync timed out - continuing anyway")
     except Exception as e:
         print(f"Failed to sync commands: {e}")
         
     print("Bot setup completed.")
 
-    # post register message
-    reg_chan = bot.get_channel(config.REGISTER_CHANNEL_ID)
-    if reg_chan:
-        try:
-            await reg_chan.purge(limit=5)
-        except Exception:
-            pass
-        view = RegisterView()
-        embed = discord.Embed(
-            title='📝 Register for Matches',
-            description=(
-                "**Register to participate in matches!**\n\n"
-                "You'll need:\n"
-                "• Your **Standoff 2 Nickname**\n"
-                "• Your **Standoff 2 ID** (numbers only)\n\n"
-                "**What happens when you register:**\n"
-                "• Your Discord nickname needs to be the same as your so2 name\n"
-                "• You'll get a Level 1 role and start at base ELO\n"
-                "• You can join matches and gain/lose ELO\n"
-                "• Your stats will be tracked on the leaderboard\n\n"
-                "Click the button below to register! 👇"
-            ),
-            color=discord.Color.blue()
-        )
-        embed.set_footer(text="Already registered? Use /set_nick and /set_id to update your info")
-        await reg_chan.send(embed=embed, view=view)
+    # Post register message and submit instructions in background
+    async def post_startup_messages():
+        # post register message
+        reg_chan = bot.get_channel(config.REGISTER_CHANNEL_ID)
+        if reg_chan:
+            try:
+                await reg_chan.purge(limit=5)
+            except Exception:
+                pass
+            view = RegisterView()
+            embed = discord.Embed(
+                title='📝 Register for Matches',
+                description=(
+                    "**Register to participate in matches!**\n\n"
+                    "You'll need:\n"
+                    "• Your **Standoff 2 Nickname**\n"
+                    "• Your **Standoff 2 ID** (numbers only)\n\n"
+                    "**What happens when you register:**\n"
+                    "• Your Discord nickname needs to be the same as your so2 name\n"
+                    "• You'll get a Level 1 role and start at base ELO\n"
+                    "• You can join matches and gain/lose ELO\n"
+                    "• Your stats will be tracked on the leaderboard\n\n"
+                    "Click the button below to register! 👇"
+                ),
+                color=discord.Color.blue()
+            )
+            embed.set_footer(text="Already registered? Use /set_nick and /set_id to update your info")
+            await reg_chan.send(embed=embed, view=view)
 
-    # post submit results message (NEW)
-    await post_submit_instructions()
+        # post submit results message (NEW)
+        await post_submit_instructions()
+    
+    # Start posting messages in background
+    asyncio.create_task(post_startup_messages())
 
     print('DEBUG_MODE', getattr(config, 'DEBUG_MODE', None), 'DEBUG_PLAYERS', getattr(config, 'DEBUG_PLAYERS', None))
+
 
 @bot.event
 async def on_voice_state_update(member, before, after):
     guild = member.guild
-    left_lobby = before.channel and before.channel.id == config.LOBBY_VOICE_CHANNEL_ID and (not after.channel or after.channel.id != config.LOBBY_VOICE_CHANNEL_ID)
-    moved_into_lobby = after.channel and after.channel.id == config.LOBBY_VOICE_CHANNEL_ID and (not before.channel or before.channel.id != config.LOBBY_VOICE_CHANNEL_ID)
+    
+    # Check if user left any lobby
+    left_lobby = (before.channel and 
+                  is_lobby_voice_channel(before.channel.id) and 
+                  (not after.channel or not is_lobby_voice_channel(after.channel.id)))
+    
+    # Check if user moved into any lobby
+    moved_into_lobby = (after.channel and 
+                        is_lobby_voice_channel(after.channel.id) and 
+                        (not before.channel or not is_lobby_voice_channel(before.channel.id)))
+    
+    # Check if user switched between lobbies
+    switched_lobbies = (before.channel and after.channel and 
+                       is_lobby_voice_channel(before.channel.id) and 
+                       is_lobby_voice_channel(after.channel.id) and 
+                       before.channel.id != after.channel.id)
 
     async def build_and_apply_waiting_embed(text_channel: discord.TextChannel, lobby_vc: discord.VoiceChannel):
         """Create or update the lobby waiting embed with richer context and branding.
@@ -1932,8 +1988,16 @@ async def on_voice_state_update(member, before, after):
             "- The match will start automatically when full.\n"
             "- Be respectful and ready to play."
         )
+        # Determine lobby title based on text channel
+        if text_channel.id == config.LOBBY_TEXT_CHANNEL_ID:
+            lobby_title = "Major Esports Faceit — Lobby 1"
+        elif text_channel.id == config.LOBBY2_TEXT_CHANNEL_ID:
+            lobby_title = "Major Esports Faceit — Lobby 2"
+        else:
+            lobby_title = "Major Esports Faceit — Lobby"
+            
         embed = discord.Embed(
-            title="ARENA FACEIT — Lobby",
+            title=lobby_title,
             description=description,
             color=discord.Color.from_rgb(220, 20, 60)
         )
@@ -1949,22 +2013,6 @@ async def on_voice_state_update(member, before, after):
             embed.add_field(name="Current players", value="No players yet — be the first!", inline=False)
 
         embed.set_footer(text="Powered by Arena | Developed by narcissist.")
-
-        # Try to add a thumbnail logo if present
-        logo_filename = "af_logo.png"
-        file_obj = None
-        try:
-            with open(logo_filename, "rb") as f:
-                file_obj = discord.File(f, filename=logo_filename)
-            embed.set_thumbnail(url=f"attachment://{logo_filename}")
-        except Exception:
-            # Fallback to existing image.png if available
-            try:
-                with open("image.png", "rb") as f:
-                    file_obj = discord.File(f, filename="image.png")
-                embed.set_thumbnail(url="attachment://image.png")
-            except Exception:
-                pass
 
         # get or create a status message for this text channel
         # Use a per-channel lock to prevent race conditions
@@ -2015,10 +2063,7 @@ async def on_voice_state_update(member, before, after):
                     pass
 
             if not msg:
-                if file_obj is not None:
-                    new_msg = await text_channel.send(embed=embed, file=file_obj)
-                else:
-                    new_msg = await text_channel.send(embed=embed)
+                new_msg = await text_channel.send(embed=embed)
                 status["message_id"] = new_msg.id
                 status["state"] = "waiting"
                 lobby_status[text_channel.id] = status
@@ -2051,29 +2096,32 @@ async def on_voice_state_update(member, before, after):
 
     # If someone left the lobby and there's an active session, reset
     if left_lobby:
-        text_ch = guild.get_channel(config.LOBBY_TEXT_CHANNEL_ID)
-        if text_ch:
-            chan_id = text_ch.id
-            if active_picks.get(chan_id):
-                await cancel_session_and_reset(chan_id, reason=f"{member.display_name} left during an active session. Lobby reset.", leaver_id=member.id)
-                return
-            map_cog = bot.get_cog('MapBan')
-            if map_cog and chan_id in map_cog.active:
-                st = map_cog.active[chan_id]
-                if len([m for m in st["maps"] if m not in st["banned"]]) > 1:
-                    await cancel_session_and_reset(chan_id, reason=f"{member.display_name} left during map ban. Lobby reset.", leaver_id=member.id)
-                    try:
-                        del map_cog.active[chan_id]
-                    except:
-                        pass
+        # Get the text channel for the lobby they left
+        text_channel_id = get_lobby_text_channel_id(before.channel.id)
+        if text_channel_id:
+            text_ch = guild.get_channel(text_channel_id)
+            if text_ch:
+                chan_id = text_ch.id
+                if active_picks.get(chan_id):
+                    await cancel_session_and_reset(chan_id, reason=f"{member.display_name} left during an active session. Lobby reset.", leaver_id=member.id)
                     return
-            # If no active session, update the waiting embed to reflect the new count
-            try:
-                lobby_vc = guild.get_channel(config.LOBBY_VOICE_CHANNEL_ID)
-                if lobby_vc:
-                    await build_and_apply_waiting_embed(text_ch, lobby_vc)
-            except Exception:
-                pass
+                map_cog = bot.get_cog('MapBan')
+                if map_cog and chan_id in map_cog.active:
+                    st = map_cog.active[chan_id]
+                    if len([m for m in st["maps"] if m not in st["banned"]]) > 1:
+                        await cancel_session_and_reset(chan_id, reason=f"{member.display_name} left during map ban. Lobby reset.", leaver_id=member.id)
+                        try:
+                            del map_cog.active[chan_id]
+                        except:
+                            pass
+                        return
+                # If no active session, update the waiting embed to reflect the new count
+                try:
+                    lobby_vc = before.channel  # Use the channel they left from
+                    if lobby_vc:
+                        await build_and_apply_waiting_embed(text_ch, lobby_vc)
+                except Exception:
+                    pass
 
     # When someone joins, check if they're timed out first
     if moved_into_lobby:
@@ -2087,15 +2135,17 @@ async def on_voice_state_update(member, before, after):
                 # Move them out of the lobby
                 await member.move_to(None)
                 
-                # Send timeout message
-                text_ch = guild.get_channel(config.LOBBY_TEXT_CHANNEL_ID)
-                if text_ch:
-                    embed = discord.Embed(
-                        title="🚫 Player Timed Out",
-                        description=f"{member.mention} is timed out for leaving during an active session.\n\nTime remaining: {minutes}m {seconds}s",
-                        color=discord.Color.red()
-                    )
-                    await text_ch.send(embed=embed, delete_after=10)
+                # Send timeout message to the appropriate lobby text channel
+                text_channel_id = get_lobby_text_channel_id(after.channel.id)
+                if text_channel_id:
+                    text_ch = guild.get_channel(text_channel_id)
+                    if text_ch:
+                        embed = discord.Embed(
+                            title="🚫 Player Timed Out",
+                            description=f"{member.mention} is timed out for leaving during an active session.\n\nTime remaining: {minutes}m {seconds}s",
+                            color=discord.Color.red()
+                        )
+                        await text_ch.send(embed=embed, delete_after=10)
                     
                 # Try to DM the user
                 try:
@@ -2116,24 +2166,62 @@ async def on_voice_state_update(member, before, after):
         
         # Normal lobby join logic (only if not timed out)
         lobby = after.channel
-        text_ch = guild.get_channel(config.LOBBY_TEXT_CHANNEL_ID)
-        if not text_ch:
-            return
-        await build_and_apply_waiting_embed(text_ch, lobby)
+        text_channel_id = get_lobby_text_channel_id(after.channel.id)
+        if text_channel_id:
+            text_ch = guild.get_channel(text_channel_id)
+            if not text_ch:
+                return
+            await build_and_apply_waiting_embed(text_ch, lobby)
 
-        # start if enough players present
-        members_now = [m for m in lobby.members if not getattr(m, 'bot', False)]
-        needed = config.DEBUG_PLAYERS if config.DEBUG_MODE and config.DEBUG_PLAYERS else 10
-        if len(members_now) >= needed:
-            # edit status message to show starting picking
-            status_msg_id = lobby_status[text_ch.id]["message_id"]
-            try:
-                status_msg = await text_ch.fetch_message(status_msg_id)
-                embed = discord.Embed(title="✅ Lobby full — starting picking stage...", color=discord.Color.green())
-                await status_msg.edit(embed=embed, view=None)
-            except Exception:
-                pass
-            await start_picking_stage(text_ch, lobby.members)
+            # start if enough players present
+            members_now = [m for m in lobby.members if not getattr(m, 'bot', False)]
+            needed = config.DEBUG_PLAYERS if config.DEBUG_MODE and config.DEBUG_PLAYERS else 10
+            if len(members_now) >= needed:
+                # edit status message to show starting picking
+                status_msg_id = lobby_status[text_ch.id]["message_id"]
+                try:
+                    status_msg = await text_ch.fetch_message(status_msg_id)
+                    embed = discord.Embed(title="✅ Lobby full — starting picking stage...", color=discord.Color.green())
+                    await status_msg.edit(embed=embed, view=None)
+                except Exception:
+                    pass
+                await start_picking_stage(text_ch, lobby.members)
+
+    # Handle switching between lobbies
+    if switched_lobbies:
+        # Update the lobby they left
+        left_text_channel_id = get_lobby_text_channel_id(before.channel.id)
+        if left_text_channel_id:
+            left_text_ch = guild.get_channel(left_text_channel_id)
+            if left_text_ch:
+                try:
+                    await build_and_apply_waiting_embed(left_text_ch, before.channel)
+                except Exception:
+                    pass
+        
+        # Update the lobby they joined
+        joined_text_channel_id = get_lobby_text_channel_id(after.channel.id)
+        if joined_text_channel_id:
+            joined_text_ch = guild.get_channel(joined_text_channel_id)
+            if joined_text_ch:
+                try:
+                    await build_and_apply_waiting_embed(joined_text_ch, after.channel)
+                    
+                    # Check if the new lobby is full and should start
+                    members_now = [m for m in after.channel.members if not getattr(m, 'bot', False)]
+                    needed = config.DEBUG_PLAYERS if config.DEBUG_MODE and config.DEBUG_PLAYERS else 10
+                    if len(members_now) >= needed:
+                        # edit status message to show starting picking
+                        status_msg_id = lobby_status[joined_text_ch.id]["message_id"]
+                        try:
+                            status_msg = await joined_text_ch.fetch_message(status_msg_id)
+                            embed = discord.Embed(title="✅ Lobby full — starting picking stage...", color=discord.Color.green())
+                            await status_msg.edit(embed=embed, view=None)
+                        except Exception:
+                            pass
+                        await start_picking_stage(joined_text_ch, after.channel.members)
+                except Exception:
+                    pass
 
 # ---------- Commands ----------
 @bot.command(name='forcestart')
@@ -2449,20 +2537,20 @@ async def stats(interaction: discord.Interaction):
         kpr = (total_kills / rounds_played) if rounds_played > 0 else 0
         
         # Impact rating calculation (simplified) - scale to 0-3 range
-        impact = min(3.0, max(0.0, kd_ratio_num * 0.8 + (avg_kills / 25) * 0.2)) if avg_kills > 0 else 1.0
+        impact = min(3.0, max(0.0, kd_ratio_num * 0.8 + (avg_kills / 25) * 0.2)) if avg_kills > 0 else 0
         
         # SVR (Survival Rate) - better calculation based on K/D
         if total_games > 0:
             survival_factor = min(1.0, max(0.0, (total_kills - total_deaths + total_games) / (total_games * 2)))
             svr = survival_factor
         else:
-            svr = 0.5
+            svr = 0
         
         # Rating calculation (HLTV-style) - scale to 0-3 range  
         if total_games > 0:
             rating = min(3.0, max(0.0, kd_ratio_num * 0.6 + (avg_kills / 20) * 0.3 + (win_rate_num / 100) * 0.1))
         else:
-            rating = 1.0
+            rating = 0
         
         # Extract clan tag from name (everything before first space or #)
         player_name = pdata.get('nick', 'Unknown')
@@ -2520,7 +2608,7 @@ async def stats(interaction: discord.Interaction):
         league = "Leaderboard"
         
         # Calculate MVP count (simplified: ~10% of wins)
-        mvp = max(1, wins // 10)
+        mvp = wins // 10 if wins > 0 else 0
         
         # Generate leaderboard context
         all_players = []
@@ -2543,11 +2631,32 @@ async def stats(interaction: discord.Interaction):
         # Create leaderboard with top 3 + current player
         leaderboard = []
         for i, p in enumerate(all_players[:3], 1):
-            leaderboard.append({'rank': str(i), 'name': p['name']})
+            # Get Discord avatar for this player
+            avatar_url = ''
+            try:
+                member = interaction.guild.get_member(int(p['id']))
+                if member and member.display_avatar:
+                    avatar_url = str(member.display_avatar.url)
+            except:
+                pass
+            
+            leaderboard.append({
+                'rank': str(i), 
+                'name': p['name'],
+                'avatar': avatar_url,
+                'elo': p['elo'],
+                'level': config.get_level_from_elo(p['elo'])
+            })
         
         # Add current player if not in top 3
         if current_rank > 3:
-            leaderboard.append({'rank': str(current_rank), 'name': player_data[key].get('nick', 'Unknown')})
+            leaderboard.append({
+                'rank': str(current_rank), 
+                'name': player_data[key].get('nick', 'Unknown'),
+                'avatar': str(interaction.user.display_avatar.url),
+                'elo': player_data[key].get('elo', 1000),
+                'level': level
+            })
 
         # Enhanced map cards for template - ensure all config maps are included
         maps_list = []
@@ -3154,43 +3263,87 @@ async def check_permissions(interaction: discord.Interaction):
     
     await interaction.followup.send(embed=embed, ephemeral=True)
 
-@bot.tree.command(name="remove_banned_players", description="Remove all banned players from the database (Staff/Mod/Owner only)")
+@bot.tree.command(name="remove_banned_players", description="Remove all banned players and players who left/kicked from the database (Staff/Mod/Owner only)")
 @staff_mod_owner_only()
 async def remove_banned_players(interaction: discord.Interaction):
-    """Remove all players marked as banned from players.json"""
+    """Remove all players who are banned on Discord or have left/been kicked from the server from players.json"""
     await interaction.response.defer(ephemeral=True)
     
     try:
-        # Find all banned players
-        banned_players = {}
-        for user_id, player_info in player_data.items():
-            if player_info.get('banned', False):
-                banned_players[user_id] = player_info
-        
-        if not banned_players:
+        # Get all Discord bans
+        ban_list = []
+        try:
+            async for ban_entry in interaction.guild.bans():
+                ban_list.append(ban_entry.user.id)
+        except Exception as e:
             embed = discord.Embed(
-                title="ℹ️ No Banned Players Found",
-                description="There are currently no players marked as banned in the database.",
+                title="❌ Failed to Fetch Bans",
+                description=f"Could not retrieve server bans: {str(e)}",
+                color=discord.Color.red()
+            )
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return
+        
+        # Find players in database who are banned on Discord or no longer in the server
+        players_to_remove = {}
+        for user_id, player_info in player_data.items():
+            try:
+                user_id_int = int(user_id)
+                
+                # Check if player is banned
+                is_banned = user_id_int in ban_list
+                
+                # Check if player is still in the server
+                member = interaction.guild.get_member(user_id_int)
+                is_in_server = member is not None
+                
+                # Add to removal list if banned or not in server
+                if is_banned or not is_in_server:
+                    players_to_remove[user_id] = {
+                        'info': player_info,
+                        'reason': 'banned' if is_banned else 'left/kicked'
+                    }
+                    
+            except ValueError:
+                continue  # Invalid user ID
+        
+        if not players_to_remove:
+            embed = discord.Embed(
+                title="ℹ️ No Players to Remove Found",
+                description="There are currently no players in the database who are banned on Discord or have left the server.",
                 color=discord.Color.blue()
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
         
         # Create confirmation embed
-        banned_list = []
-        for user_id, player_info in banned_players.items():
+        players_list = []
+        banned_count = 0
+        left_count = 0
+        
+        for user_id, data in players_to_remove.items():
+            player_info = data['info']
+            reason = data['reason']
             nick = player_info.get('nick', 'Unknown')
             pid = player_info.get('id', 'N/A')
-            banned_list.append(f"• **{nick}** (ID: `{pid}`, Discord: <@{user_id}>)")
+            
+            if reason == 'banned':
+                banned_count += 1
+                players_list.append(f"• **{nick}** (ID: `{pid}`, Discord: <@{user_id}>) - 🚫 **Banned**")
+            else:
+                left_count += 1
+                players_list.append(f"• **{nick}** (ID: `{pid}`, Discord: <@{user_id}>) - 🚪 **Left/Kicked**")
         
         # Limit display to first 10 players to avoid embed size limits
-        display_list = banned_list[:10]
-        if len(banned_list) > 10:
-            display_list.append(f"... and {len(banned_list) - 10} more players")
+        display_list = players_list[:10]
+        if len(players_list) > 10:
+            display_list.append(f"... and {len(players_list) - 10} more players")
         
         embed = discord.Embed(
-            title="⚠️ Remove Banned Players Confirmation",
-            description=f"Found **{len(banned_players)}** banned players to remove:\n\n" + "\n".join(display_list),
+            title="⚠️ Remove Players Confirmation",
+            description=f"Found **{len(players_to_remove)}** players to remove from database:\n"
+                       f"• **{banned_count}** banned players\n"
+                       f"• **{left_count}** players who left/kicked\n\n" + "\n".join(display_list),
             color=discord.Color.red()
         )
         
@@ -3238,25 +3391,29 @@ async def remove_banned_players(interaction: discord.Interaction):
         
         # Start the removal process
         removal_embed = discord.Embed(
-            title="🔄 Removing Banned Players...",
-            description="Please wait while banned players are being removed from the database...",
+            title="🔄 Removing Players...",
+            description="Please wait while players are being removed from the database...",
             color=discord.Color.orange()
         )
         await interaction.edit_original_response(embed=removal_embed, view=None)
         
-        # Remove banned players
+        # Remove players
         removed_count = 0
         removal_log = []
         
-        for user_id in list(banned_players.keys()):
+        for user_id in list(players_to_remove.keys()):
             try:
-                player_info = player_data[user_id]
+                data = players_to_remove[user_id]
+                player_info = data['info']
+                reason = data['reason']
                 nick = player_info.get('nick', 'Unknown')
                 
                 # Remove from player_data
                 del player_data[user_id]
                 removed_count += 1
-                removal_log.append(f"✅ Removed: {nick} (ID: {user_id})")
+                
+                reason_emoji = "🚫" if reason == 'banned' else "🚪"
+                removal_log.append(f"✅ Removed: {nick} (ID: {user_id}) - {reason_emoji} {reason.title()}")
                 
             except Exception as e:
                 removal_log.append(f"❌ Failed to remove {user_id}: {str(e)}")
@@ -3266,13 +3423,13 @@ async def remove_banned_players(interaction: discord.Interaction):
         
         # Create success embed
         success_embed = discord.Embed(
-            title="✅ Banned Players Removed Successfully!",
+            title="✅ Players Removed Successfully!",
             color=discord.Color.green()
         )
         
         success_embed.add_field(
             name="📊 Removal Statistics",
-            value=f"• **{removed_count}** banned players removed\n"
+            value=f"• **{removed_count}** players removed\n"
                   f"• **{len(player_data)}** players remaining in database\n"
                   f"• Database cleaned and saved",
             inline=False
@@ -3293,8 +3450,8 @@ async def remove_banned_players(interaction: discord.Interaction):
         success_embed.add_field(
             name="🔄 Next Steps",
             value="• Leaderboard will be automatically updated\n"
-                  "• Banned players can re-register if unbanned\n"
-                  "• Database has been cleaned of banned entries",
+                  "• Removed players can re-register if they rejoin\n"
+                  "• Database has been cleaned of inactive entries",
             inline=False
         )
         
@@ -3307,14 +3464,14 @@ async def remove_banned_players(interaction: discord.Interaction):
             if cog and interaction.guild:
                 await cog.post_leaderboard(interaction.guild)
         except Exception as e:
-            print(f"Failed to update leaderboard after removing banned players: {e}")
+            print(f"Failed to update leaderboard after removing players: {e}")
         
         # Log the action
-        print(f"[ADMIN] {interaction.user} removed {removed_count} banned players from database")
+        print(f"[ADMIN] {interaction.user} removed {removed_count} players from database (banned/left/kicked)")
         
     except Exception as e:
         error_embed = discord.Embed(
-            title="❌ Failed to Remove Banned Players",
+            title="❌ Failed to Remove Players",
             description=f"An error occurred during the removal process:\n```{str(e)}```",
             color=discord.Color.red()
         )
