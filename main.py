@@ -3021,7 +3021,8 @@ async def reset_season(interaction: discord.Interaction):
                        "• Revert all registered players to Level 1 roles\n"
                        "• Clear all match results\n"
                        "• Clear all party data\n"
-                       "• Clear all match history\n\n"
+                       "• Clear all match history\n"
+                       "• Reset match manager (clear all matches)\n\n"
                        "**Only registered players will be affected.**\n"
                        "**This action cannot be undone!**",
             color=discord.Color.red()
@@ -3139,7 +3140,16 @@ async def reset_season(interaction: discord.Interaction):
             except Exception as e:
                 reset_stats["errors"].append(f"Failed to clear {filename}: {str(e)}")
         
-        # 3. Clear global variables
+        # 3. Reset match manager
+        try:
+            import match_manager
+            # Reset the match manager to initial state
+            match_manager._save({"next": 1, "matches": {}})
+            reset_stats["files_cleared"] += 1  # Count this as a cleared file
+        except Exception as e:
+            reset_stats["errors"].append(f"Failed to reset match manager: {str(e)}")
+        
+        # 4. Clear global variables
         global results_data, parties_data
         results_data = {}
         parties_data = {}
@@ -3174,7 +3184,8 @@ async def reset_season(interaction: discord.Interaction):
             value="All players now start fresh with:\n"
                   "• **100 ELO** (Level 1)\n"
                   "• **0 wins, 0 losses**\n"
-                  "• **Clean match history**",
+                  "• **Clean match history**\n"
+                  "• **Reset match manager**",
             inline=False
         )
         
