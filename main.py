@@ -628,7 +628,7 @@ class DraftView(View):
             st["rehost_votes"].add(voter_id)
 
             # Determine threshold: 70% of non-bot members (default 7/10)
-            nonbots = [m for m in vc.members if not getattr(m, 'bot', False)]
+            nonbots = [m for m in user_voice_channel.members if not getattr(m, 'bot', False)]
             import math
             threshold = max(1, math.ceil(0.7 * len(nonbots)))
 
