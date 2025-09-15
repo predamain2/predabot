@@ -3377,6 +3377,283 @@ async def check_permissions(interaction: discord.Interaction):
     
     await interaction.followup.send(embed=embed, ephemeral=True)
 
+@bot.tree.command(name="winner", description="Manually set match winner when screenshot is missing (Staff/Mod/Owner only)")
+@staff_mod_owner_only()
+@discord.app_commands.describe(
+    match_id="Match ID (e.g. 3)",
+    winner="1 = CT, 2 = T",
+    score="Final score (e.g. 13-2 for the winner)"
+)
+async def set_winner(interaction: discord.Interaction, match_id: str, winner: int, score: str):
+    await interaction.response.defer(ephemeral=True)
+
+    try:
+        # Validate inputs
+        if winner not in (1, 2):
+            await interaction.followup.send("❌ Winner must be 1 (CT) or 2 (T).", ephemeral=True)
+            return
+        if not re.fullmatch(r"\d{1,2}-\d{1,2}", score):
+            await interaction.followup.send("❌ Score must be in the form NN-NN (e.g. 13-2).", ephemeral=True)
+            return
+
+        # Duplicate check
+        if match_id in results_data:
+            await interaction.followup.send("⚠️ This Match ID was already submitted.", ephemeral=True)
+            return
+
+        # Load match definition
+        try:
+            matches_db = json.loads(pathlib.Path("matches.json").read_text())
+        except Exception:
+            matches_db = {"matches": {}}
+
+        matches_dict = matches_db.get("matches", {})
+
+        # Try both str and int keys
+        original_match = matches_dict.get(str(match_id))
+        if original_match is None:
+            try:
+                original_match = matches_dict.get(int(match_id))
+            except Exception:
+                original_match = None
+
+        if original_match is None:
+            await interaction.followup.send("❌ Match ID does not exist in active matches.", ephemeral=True)
+            return
+
+        # Build CT/T teams from match definition
+        team1_ids = original_match.get("team1", []) or []
+        team2_ids = original_match.get("team2", []) or []
+
+        # User specified mapping: team1 = CT, team2 = T
+        ct_ids = [str(x) for x in team1_ids]
+        t_ids = [str(x) for x in team2_ids]
+
+        def build_player_entry(discord_id_str: str):
+            pdata = player_data.get(discord_id_str, {})
+            return {
+                "name": pdata.get("nick", f"Player {discord_id_str}"),
+                "kills": 0,
+                "assists": 0,
+                "deaths": 0,
+                "kd": 0.0,
+                "elo_change": 0,
+                "elo": int(pdata.get("elo", config.DEFAULT_ELO)),
+                "discord_id": discord_id_str,
+            }
+
+        ct_team = [build_player_entry(pid) for pid in ct_ids]
+        t_team = [build_player_entry(pid) for pid in t_ids]
+
+        # Determine declared winner
+        declared_winner_ct = (winner == 1)
+
+        # Update player stats and compute elo changes
+        guild = interaction.guild
+
+        def calculate_elo_change(level, win=True):
+            return config.get_elo_change(level, win)
+
+        winning_team_entries = ct_team if declared_winner_ct else t_team
+        losing_team_entries = t_team if declared_winner_ct else ct_team
+
+        # Track elo deltas by name for storing in results
+        player_elo_changes = {}
+
+        # Winners
+        for p in winning_team_entries:
+            # Find player record by discord id
+            pid = p.get("discord_id")
+            if not pid or pid not in player_data:
+                continue
+            v = player_data[pid]
+            v["wins"] = v.get("wins", 0) + 1
+            current_level = v.get("level", 1)
+            change = calculate_elo_change(current_level, win=True)
+            v["elo"] = v.get("elo", config.DEFAULT_ELO) + change
+            # Update level and roles if changed
+            try:
+                new_level = config.get_level_from_elo(v["elo"])
+            except Exception:
+                new_level = v.get("level", 1)
+            old_level = v.get("level", 1)
+            if new_level != old_level:
+                v["level"] = new_level
+                member = guild.get_member(int(pid)) if guild else None
+                if member:
+                    try:
+                        old_role = guild.get_role(config.ROLE_LEVELS.get(old_level))
+                        if old_role and old_role in member.roles:
+                            await member.remove_roles(old_role)
+                        new_role = guild.get_role(config.ROLE_LEVELS.get(new_level))
+                        if new_role:
+                            await member.add_roles(new_role)
+                        await member.edit(nick=v.get('nick'))
+                    except Exception:
+                        pass
+            else:
+                member = guild.get_member(int(pid)) if guild else None
+                if member:
+                    try:
+                        await member.edit(nick=v.get('nick'))
+                    except Exception:
+                        pass
+
+            player_data[pid] = v
+            player_elo_changes[p["name"]] = change
+
+        # Losers
+        for p in losing_team_entries:
+            pid = p.get("discord_id")
+            if not pid or pid not in player_data:
+                continue
+            v = player_data[pid]
+            v["losses"] = v.get("losses", 0) + 1
+            current_level = v.get("level", 1)
+            change = calculate_elo_change(current_level, win=False)
+            v["elo"] = max(config.DEFAULT_ELO, v.get("elo", config.DEFAULT_ELO) + change)
+            try:
+                new_level = config.get_level_from_elo(v["elo"])
+            except Exception:
+                new_level = v.get("level", 1)
+            old_level = v.get("level", 1)
+            if new_level != old_level:
+                v["level"] = new_level
+                member = guild.get_member(int(pid)) if guild else None
+                if member:
+                    try:
+                        old_role = guild.get_role(config.ROLE_LEVELS.get(old_level))
+                        if old_role and old_role in member.roles:
+                            await member.remove_roles(old_role)
+                        new_role = guild.get_role(config.ROLE_LEVELS.get(new_level))
+                        if new_role:
+                            await member.add_roles(new_role)
+                        await member.edit(nick=v.get('nick'))
+                    except Exception:
+                        pass
+            else:
+                member = guild.get_member(int(pid)) if guild else None
+                if member:
+                    try:
+                        await member.edit(nick=v.get('nick'))
+                    except Exception:
+                        pass
+
+            player_data[pid] = v
+            player_elo_changes[p["name"]] = change
+
+        # Save players after ELO updates (triggers leaderboard updates via existing hooks if any)
+        save_players()
+
+        # Attach elo_change to entries and prepare snapshot with post-update ELO/discord_id
+        for p in winning_team_entries:
+            p["elo_change"] = player_elo_changes.get(p["name"], 0)
+        for p in losing_team_entries:
+            p["elo_change"] = player_elo_changes.get(p["name"], 0)
+
+        def snapshot_with_elo(players_list):
+            snap = []
+            for p in players_list:
+                p_copy = dict(p)
+                # pull current ELO and keep discord_id
+                pid = str(p_copy.get("discord_id") or "")
+                if pid and pid in player_data:
+                    p_copy["elo"] = int(player_data[pid].get("elo", config.DEFAULT_ELO))
+                    p_copy["discord_id"] = pid
+                else:
+                    # fallback by name
+                    for v_discord_id, v in player_data.items():
+                        if v.get("nick", "").lower() == str(p_copy.get("name", "")).lower():
+                            p_copy["elo"] = int(v.get("elo", config.DEFAULT_ELO))
+                            p_copy["discord_id"] = str(v_discord_id)
+                            break
+                if "elo" not in p_copy:
+                    p_copy["elo"] = int(config.DEFAULT_ELO)
+                if "discord_id" not in p_copy:
+                    p_copy["discord_id"] = None
+                snap.append(p_copy)
+            return snap
+
+        # Prepare match_data for image rendering and storage
+        match_data = {
+            "match_id": match_id,
+            "winner": "CT" if declared_winner_ct else "T",
+            "score": score,
+            "map": original_match.get("map", "Unknown"),
+            "ct_team": ct_team,
+            "t_team": t_team,
+        }
+
+        # Store in results.json (similar shape to screenshot flow)
+        # MVP not applicable here (no stats), set to None / 0
+        mvp_player = None
+        max_kills = 0
+
+        results_entry = {
+            "match_id": match_id,
+            "submitter_id": interaction.user.id,
+            "attachment_url": None,
+            "submitted_at": int(time.time()),
+            "winner": "CT" if declared_winner_ct else "T",
+            "score": score,
+            "map": match_data["map"],
+            "mvp": mvp_player,
+            "mvp_kills": max_kills,
+            "winning_team": snapshot_with_elo(winning_team_entries),
+            "losing_team": snapshot_with_elo(losing_team_entries),
+        }
+
+        results_data[match_id] = results_entry
+        save_results()
+
+        # Post embeds/images to results channels
+        game_results_id = 1406361378792407253
+        staff_results_id = 1411756785383243847
+
+        for channel_id in [game_results_id, staff_results_id]:
+            dest = interaction.guild.get_channel(channel_id)
+            if not dest:
+                continue
+
+            try:
+                output_file = f"scoreboard_{match_id}.png"
+                await render_html_to_image(match_data, output_file)
+
+                mvp_string = "None"
+                embed = discord.Embed(
+                    title="📊 Match Results",
+                    description=(
+                        f"**Match ID:** `{match_id}`\n"
+                        f"**Winner:** {'CT' if declared_winner_ct else 'T'}\n"
+                        f"**Score:** {score}\n"
+                        f"**MVP:** {mvp_string}\n"
+                        f"**Submitted by:** {interaction.user.mention}\n"
+                    ),
+                    color=discord.Color.red()
+                )
+
+                # Add image
+                file = discord.File(output_file)
+                embed.set_image(url="attachment://" + output_file)
+                await dest.send(file=file, embed=embed)
+
+                # Clean up the PNG file after sending
+                try:
+                    os.remove(output_file)
+                except Exception:
+                    pass
+            except Exception as e:
+                print(f"Failed to post manual scoreboard for match {match_id} in channel {channel_id}: {e}")
+                try:
+                    await dest.send(embed=discord.Embed(title="📊 Match Results", description=f"**Match ID:** `{match_id}`\n**Winner:** {'CT' if declared_winner_ct else 'T'}\n**Score:** {score}", color=discord.Color.red()))
+                except Exception:
+                    pass
+
+        await interaction.followup.send(f"✅ Recorded winner for match `{match_id}` and posted results.", ephemeral=True)
+
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error setting winner: {str(e)}", ephemeral=True)
+
 @bot.tree.command(name="remove_banned_players", description="Remove all banned players and players who left/kicked from the database (Staff/Mod/Owner only)")
 @staff_mod_owner_only()
 async def remove_banned_players(interaction: discord.Interaction):

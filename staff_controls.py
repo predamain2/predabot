@@ -134,32 +134,57 @@ class StaffMatchControls(View):
                 await interaction.response.send_message("Match not found in database.", ephemeral=True)
                 return
 
-            # Revert player stats and ELO
+            # Revert player stats and ELO (prefer discord_id, fallback to name; infer delta if needed)
             for team in ["winning_team", "losing_team"]:
                 for player in match_data[team]:
-                    player_name = player["name"]
-                    elo_change = player.get("elo_change", 0)
-                    
-                    # Find player in player_data
-                    for player_id, data in player_data.items():
-                        if data["nick"].lower() == player_name.lower():
-                            # Revert wins/losses
-                            if team == "winning_team":
-                                data["wins"] = max(0, data["wins"] - 1)
-                            else:
-                                data["losses"] = max(0, data["losses"] - 1)
-                            
-                            # Revert ELO change
-                            current_elo = data.get("elo", config.DEFAULT_ELO)
-                            new_elo = current_elo - elo_change
-                            data["elo"] = max(config.DEFAULT_ELO, new_elo)
-                            
-                            # Recalculate level based on new ELO
-                            new_level = config.get_level_from_elo(data["elo"])
-                            data["level"] = new_level
-                            
-                            print(f"Reverted {player_name}: ELO {current_elo} -> {data['elo']}, Level -> {new_level}")
-                            break
+                    player_name = player.get("name")
+                    elo_change = int(player.get("elo_change", 0))
+                    discord_id = player.get("discord_id")
+
+                    # Find player in player_data by discord_id first, else by nick
+                    player_key = None
+                    pdata = None
+                    if discord_id and str(discord_id) in player_data:
+                        player_key = str(discord_id)
+                        pdata = player_data[player_key]
+                    else:
+                        for pid, d in player_data.items():
+                            if d.get("nick", "").lower() == str(player_name).lower():
+                                player_key = pid
+                                pdata = d
+                                break
+
+                    if pdata is None:
+                        continue
+
+                    # Revert wins/losses
+                    if team == "winning_team":
+                        pdata["wins"] = max(0, int(pdata.get("wins", 0)) - 1)
+                    else:
+                        pdata["losses"] = max(0, int(pdata.get("losses", 0)) - 1)
+
+                    # Revert ELO change using elo_change; fallback: infer from absolute elo if present
+                    delta = elo_change
+                    if delta == 0:
+                        try:
+                            absolute = int(player.get("elo", 0))
+                            current = int(pdata.get("elo", getattr(config, "DEFAULT_ELO", 100)))
+                            guess = current - absolute
+                            if -300 <= guess <= 300:
+                                delta = guess
+                        except Exception:
+                            pass
+
+                    current_elo = int(pdata.get("elo", getattr(config, "DEFAULT_ELO", 100)))
+                    new_elo = max(getattr(config, "DEFAULT_ELO", 100), current_elo - delta)
+                    pdata["elo"] = new_elo
+
+                    try:
+                        pdata["level"] = config.get_level_from_elo(new_elo)
+                    except Exception:
+                        pass
+
+                    player_data[player_key] = pdata
 
             # Save updated player stats
             with open("players.json", "w") as f:
