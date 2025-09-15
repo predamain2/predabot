@@ -384,7 +384,7 @@ class HostInfoButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="🎮 Match Host Information",
-            color=discord.Color.blue()
+            color=discord.Color.red()
         )
         
         info_lines = [
@@ -401,7 +401,7 @@ class HostInfoButton(discord.ui.Button):
             ])
         
         embed.description = "\n".join(info_lines)
-        embed.set_footer(text="Powered by Arena | Developed by narcissist.")
+        embed.set_footer(text="Powered by Major Esports | Developed by narcissist.")
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -506,17 +506,42 @@ class RegisterModal(discord.ui.Modal, title="Player Registration"):
         except Exception as e:
             success_msg += f"\nℹ️ Failed to update nickname: {e}"
 
-        # Add roles
+        # Add roles with detailed diagnostics
         try:
+            diagnostics = []
             roles_to_add = []
-            level1_role = guild.get_role(config.ROLE_LEVELS.get(1))
-            if level1_role:
+
+            # Resolve roles by ID
+            level1_role_id = config.ROLE_LEVELS.get(1)
+            level1_role = guild.get_role(level1_role_id)
+            if not level1_role:
+                diagnostics.append(f"Level 1 role not found for ID {level1_role_id}.")
+            else:
                 roles_to_add.append(level1_role)
-            registered_role = guild.get_role(1408841094619332778)
-            if registered_role:
+
+            registered_role_id = 1408841094619332778  # consider moving to config
+            registered_role = guild.get_role(registered_role_id)
+            if not registered_role:
+                diagnostics.append(f"Registered role not found for ID {registered_role_id}.")
+            else:
                 roles_to_add.append(registered_role)
-            if roles_to_add:
-                await member.add_roles(*roles_to_add)
+
+            # Permission and hierarchy checks
+            bot_member = guild.me
+            if bot_member is None:
+                diagnostics.append("Bot member context unavailable.")
+            else:
+                if not bot_member.guild_permissions.manage_roles:
+                    diagnostics.append("Bot is missing 'Manage Roles' permission.")
+                # Ensure bot's top role is above each target role
+                for r in list(roles_to_add):
+                    if bot_member.top_role.position <= r.position:
+                        diagnostics.append(f"Bot role must be above '{r.name}' to assign it.")
+
+            if roles_to_add and not diagnostics:
+                await member.add_roles(*roles_to_add, reason="Auto registration")
+            elif diagnostics:
+                success_msg += "\nℹ️ Could not add roles: " + " | ".join(diagnostics)
         except Exception as e:
             success_msg += f"\nℹ️ Failed to add roles: {e}"
 
@@ -531,7 +556,7 @@ class RegisterView(View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Register", style=discord.ButtonStyle.green, custom_id="standoff_register_btn")
+    @discord.ui.button(label="Register", style=discord.ButtonStyle.red, custom_id="standoff_register_btn")
     async def reg_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(RegisterModal())
 
@@ -758,7 +783,7 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
             # mark UI
             if msg:
                 try:
-                    embed = discord.Embed(title="✅ Teams complete — proceeding to Map Ban", color=discord.Color.green())
+                    embed = discord.Embed(title="✅ Teams complete — proceeding to Map Ban", color=discord.Color.red())
                     if "match_id" in st:
                         embed.add_field(name="Match ID", value=f"`{st['match_id']}`", inline=False)
                     await msg.edit(embed=embed, view=None, content=None)
@@ -804,7 +829,7 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
 
 # ---------- Embeds / announce ----------
 def build_roster_embed(st):
-    e = discord.Embed(title="Match Draft — Pick Phase", color=discord.Color.blurple())
+    e = discord.Embed(title="Match Draft — Pick Phase", color=discord.Color.red())
     pick_turn = st.get('pick_turn')
     pick_mention = getattr(pick_turn, "mention", f"<@{id_of(pick_turn)}>")
     match_id = st.get('match_id', '—')
@@ -1020,7 +1045,7 @@ async def announce_teams_final(channel: discord.TextChannel, match_id, chosen_ma
     # Create an empty embed with just the button hint
     embed = discord.Embed(
         description="Click the button below to see host information",
-        color=discord.Color.blue()
+        color=discord.Color.red()
     )
     
     # Create the host profile button view
@@ -1221,24 +1246,32 @@ async def cancel_session_and_reset(channel_id, reason="A player left. Lobby rese
         try:
             msg = await ch.fetch_message(msg_id)
             if current_state == "mapban":
-                # Delete the message if it was during map ban
+                # Delete the message if it was during map ban and create new waiting message
                 await msg.delete()
-                lobby_status.pop(channel_id, None)  # Clear the status entirely
+                # Create new waiting message with reset reason using proper embed
+                embed = discord.Embed(title="Lobby reset", description=reason + "\n\nWaiting for players...", color=discord.Color.red())
+                new_msg = await ch.send(embed=embed)
+                lobby_status[channel_id] = {"message_id": new_msg.id, "state": "waiting", "reset_reason": reason}
             else:
                 # Reset to waiting state for other cases
                 embed = discord.Embed(title="Lobby reset", description=reason + "\n\nWaiting for players...", color=discord.Color.red())
                 await msg.edit(embed=embed, view=None, content=None)
                 # update lobby_status state
-            lobby_status[channel_id] = {"message_id": msg.id, "state": "waiting"}
+                lobby_status[channel_id] = {"message_id": msg.id, "state": "waiting", "reset_reason": reason}
         except Exception:
             try:
-                await ch.send("Lobby reset — " + reason)
+                # Send proper embed instead of plain text
+                embed = discord.Embed(title="Lobby reset", description=reason + "\n\nWaiting for players...", color=discord.Color.red())
+                new_msg = await ch.send(embed=embed)
+                lobby_status[channel_id] = {"message_id": new_msg.id, "state": "waiting", "reset_reason": reason}
             except Exception:
                 pass
     else:
         try:
-            new = await ch.send("Lobby reset — " + reason)
-            lobby_status[channel_id] = {"message_id": new.id, "state": "waiting"}
+            # Send proper embed instead of plain text
+            embed = discord.Embed(title="Lobby reset", description=reason + "\n\nWaiting for players...", color=discord.Color.red())
+            new_msg = await ch.send(embed=embed)
+            lobby_status[channel_id] = {"message_id": new_msg.id, "state": "waiting", "reset_reason": reason}
         except Exception:
             pass
 
@@ -1308,7 +1341,7 @@ class SubmitResultsView(View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Submit Results", style=discord.ButtonStyle.blurple, custom_id="submit_results_btn")
+    @discord.ui.button(label="Submit Results", style=discord.ButtonStyle.red, custom_id="submit_results_btn")
     async def submit_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(SubmitResultsModal())
 
@@ -1336,7 +1369,7 @@ async def post_submit_instructions():
             "3. **Upload the scoreboard screenshot** in this channel\n"
             "4. Wait for processing\n"
         ),
-        color=discord.Color.orange()
+        color=discord.Color.red()
     )
     view = SubmitResultsView()
     await submit_chan.send(embed=embed, view=view)
@@ -1397,7 +1430,7 @@ async def on_message(message: discord.Message):
                 "```\n"
                 "_Please wait while I process your submission..._"
             ),
-            color=discord.Color.blue()
+            color=discord.Color.red()
         )
     )
 
@@ -1684,7 +1717,7 @@ async def on_message(message: discord.Message):
                     f"Results have been posted to {bot.get_channel(game_results_id).mention}\n"
                     "Click the channel link above to view them!"
                 ),
-                color=discord.Color.green()
+                color=discord.Color.red()
             ),
             view=None
         )
@@ -1701,7 +1734,7 @@ async def on_message(message: discord.Message):
                 embed=discord.Embed(
                     title="✅ Submission Received", 
                     description=f"Match ID: `{match_id}`\nYour scoreboard was processed and sent to <#{game_results_id}>.",
-                    color=discord.Color.green()
+                    color=discord.Color.red()
                 ),
                 ephemeral=True,
                 delete_after=7
@@ -1745,7 +1778,7 @@ async def on_message(message: discord.Message):
                     f"**MVP:** {mvp_string} (+5 ELO bonus)\n"
                     f"**Submitted by:** {message.author.mention}\n"
                 ),
-                color=discord.Color.blue()
+                color=discord.Color.red()
             )
             
             def get_elo_for_name(name):
@@ -1801,12 +1834,12 @@ async def on_message(message: discord.Message):
             
             # Different footer for staff channel
             if channel_id == staff_results_id:
-                embed.set_footer(text="Powered by Arena | Developed by narcissist.")
+                embed.set_footer(text="Powered by Major Esports | Developed by narcissist.")
                 view = StaffMatchControls(match_id, match_data, bot)
                 embed.set_image(url="attachment://" + output_file)
                 await dest.send(file=file, embed=embed, view=view)
             else:
-                embed.set_footer(text="Powered by Arena | Developed by narcissist.")
+                embed.set_footer(text="Powered by Major Esports | Developed by narcissist.")
                 embed.set_image(url="attachment://" + output_file)
                 await dest.send(file=file, embed=embed)
             
@@ -1930,9 +1963,10 @@ async def on_ready():
                     "• You'll get a Level 1 role and start at base ELO\n"
                     "• You can join matches and gain/lose ELO\n"
                     "• Your stats will be tracked on the leaderboard\n\n"
+                    "**⚠️ Important:** Please read the <#1390815289259856044> before playing, especially **Rule #12**!\n\n"
                     "Click the button below to register! 👇"
                 ),
-                color=discord.Color.blue()
+                color=discord.Color.red()
             )
             embed.set_footer(text="Already registered? Use /set_nick and /set_id to update your info")
             await reg_chan.send(embed=embed, view=view)
@@ -1973,7 +2007,27 @@ async def on_voice_state_update(member, before, after):
         - Lists current player mentions (up to 10)
         - Adds brief instructions
         - Uses a thumbnail logo if `af_logo.png` is present in the project folder
+        - Shows reset reason if lobby was recently reset
         """
+        # Check if there's an active session (picking or mapban) - don't create waiting embed during these
+        status = lobby_status.get(text_channel.id, {})
+        current_state = status.get("state", "")
+        
+        if current_state in {"picking", "mapban"}:
+            # Verify it's truly active
+            is_active = False
+            if current_state == "picking" and active_picks.get(text_channel.id):
+                is_active = True
+            elif current_state == "mapban":
+                try:
+                    map_cog = bot.get_cog('MapBan')
+                    is_active = bool(map_cog and getattr(map_cog, 'active', {}) and text_channel.id in map_cog.active)
+                except Exception:
+                    is_active = False
+            
+            if is_active:
+                return  # Don't create waiting embed during active sessions
+        
         # Count non-bot members
         members = [m for m in lobby_vc.members if not getattr(m, 'bot', False)]
         count = len(members)
@@ -1981,13 +2035,26 @@ async def on_voice_state_update(member, before, after):
         if config.DEBUG_MODE:
             required = config.DEBUG_PLAYERS if config.DEBUG_PLAYERS else 2
 
-        # Prepare a prettier embed
-        description = (
-            f"Waiting for players: **{count}/{required}**\n\n"
-            "- Join the lobby voice channel to be counted.\n"
-            "- The match will start automatically when full.\n"
-            "- Be respectful and ready to play."
-        )
+        # Check if there's a reset reason to show
+        reset_reason = status.get("reset_reason", "")
+        
+        # Prepare description with reset reason if available
+        if reset_reason:
+            description = (
+                f"**⚠️ Lobby Reset**\n{reset_reason}\n\n"
+                f"Waiting for players: **{count}/{required}**\n\n"
+                "- Join the lobby voice channel to be counted.\n"
+                "- The match will start automatically when full.\n"
+                "- Be respectful and ready to play."
+            )
+        else:
+            description = (
+                f"Waiting for players: **{count}/{required}**\n\n"
+                "- Join the lobby voice channel to be counted.\n"
+                "- The match will start automatically when full.\n"
+                "- Be respectful and ready to play."
+            )
+        
         # Determine lobby title based on text channel
         if text_channel.id == config.LOBBY_TEXT_CHANNEL_ID:
             lobby_title = "Major Esports Faceit — Lobby 1"
@@ -2012,7 +2079,9 @@ async def on_voice_state_update(member, before, after):
         else:
             embed.add_field(name="Current players", value="No players yet — be the first!", inline=False)
 
-        embed.set_footer(text="Powered by Arena | Developed by narcissist.")
+        embed.set_footer(text="Powered by Major Esports | Developed by narcissist.")
+        
+        # Note: Logo removed to prevent issues during active sessions
 
         # get or create a status message for this text channel
         # Use a per-channel lock to prevent race conditions
@@ -2087,7 +2156,6 @@ async def on_voice_state_update(member, before, after):
                     pass
             else:
                 try:
-                    # When editing, the original attachment remains, so we only edit the embed
                     await msg.edit(embed=embed, view=None)
                     status["state"] = "waiting"
                     lobby_status[text_channel.id] = status
@@ -2119,12 +2187,16 @@ async def on_voice_state_update(member, before, after):
                 try:
                     lobby_vc = before.channel  # Use the channel they left from
                     if lobby_vc:
-                        await build_and_apply_waiting_embed(text_ch, lobby_vc)
+                        # Only update waiting embed if not in active session
+                        status = lobby_status.get(text_ch.id, {})
+                        current_state = status.get("state", "")
+                        if current_state not in {"picking", "mapban"}:
+                            await build_and_apply_waiting_embed(text_ch, lobby_vc)
                 except Exception:
                     pass
 
     # When someone joins, check if they're timed out first
-    if moved_into_lobby:
+    if moved_into_lobby and after.channel:
         # Check if player is timed out
         if is_player_timed_out(member.id):
             remaining = get_timeout_remaining(member.id)
@@ -2136,7 +2208,10 @@ async def on_voice_state_update(member, before, after):
                 await member.move_to(None)
                 
                 # Send timeout message to the appropriate lobby text channel
-                text_channel_id = get_lobby_text_channel_id(after.channel.id)
+                if after.channel:
+                    text_channel_id = get_lobby_text_channel_id(after.channel.id)
+                else:
+                    text_channel_id = None
                 if text_channel_id:
                     text_ch = guild.get_channel(text_channel_id)
                     if text_ch:
@@ -2171,7 +2246,17 @@ async def on_voice_state_update(member, before, after):
             text_ch = guild.get_channel(text_channel_id)
             if not text_ch:
                 return
-            await build_and_apply_waiting_embed(text_ch, lobby)
+            
+            # Clear reset reason when a new player joins
+            status = lobby_status.get(text_ch.id, {})
+            if status.get("reset_reason"):
+                status["reset_reason"] = None
+                lobby_status[text_ch.id] = status
+            
+            # Only update waiting embed if not in active session
+            current_state = status.get("state", "")
+            if current_state not in {"picking", "mapban"}:
+                await build_and_apply_waiting_embed(text_ch, lobby)
 
             # start if enough players present
             members_now = [m for m in lobby.members if not getattr(m, 'bot', False)]
@@ -2181,7 +2266,7 @@ async def on_voice_state_update(member, before, after):
                 status_msg_id = lobby_status[text_ch.id]["message_id"]
                 try:
                     status_msg = await text_ch.fetch_message(status_msg_id)
-                    embed = discord.Embed(title="✅ Lobby full — starting picking stage...", color=discord.Color.green())
+                    embed = discord.Embed(title="✅ Lobby full — starting picking stage...", color=discord.Color.red())
                     await status_msg.edit(embed=embed, view=None)
                 except Exception:
                     pass
@@ -2195,7 +2280,11 @@ async def on_voice_state_update(member, before, after):
             left_text_ch = guild.get_channel(left_text_channel_id)
             if left_text_ch:
                 try:
-                    await build_and_apply_waiting_embed(left_text_ch, before.channel)
+                    # Only update waiting embed if not in active session
+                    status = lobby_status.get(left_text_ch.id, {})
+                    current_state = status.get("state", "")
+                    if current_state not in {"picking", "mapban"}:
+                        await build_and_apply_waiting_embed(left_text_ch, before.channel)
                 except Exception:
                     pass
         
@@ -2205,7 +2294,16 @@ async def on_voice_state_update(member, before, after):
             joined_text_ch = guild.get_channel(joined_text_channel_id)
             if joined_text_ch:
                 try:
-                    await build_and_apply_waiting_embed(joined_text_ch, after.channel)
+                    # Clear reset reason when a player joins
+                    status = lobby_status.get(joined_text_ch.id, {})
+                    if status.get("reset_reason"):
+                        status["reset_reason"] = None
+                        lobby_status[joined_text_ch.id] = status
+                    
+                    # Only update waiting embed if not in active session
+                    current_state = status.get("state", "")
+                    if current_state not in {"picking", "mapban"}:
+                        await build_and_apply_waiting_embed(joined_text_ch, after.channel)
                     
                     # Check if the new lobby is full and should start
                     members_now = [m for m in after.channel.members if not getattr(m, 'bot', False)]
@@ -2215,7 +2313,7 @@ async def on_voice_state_update(member, before, after):
                         status_msg_id = lobby_status[joined_text_ch.id]["message_id"]
                         try:
                             status_msg = await joined_text_ch.fetch_message(status_msg_id)
-                            embed = discord.Embed(title="✅ Lobby full — starting picking stage...", color=discord.Color.green())
+                            embed = discord.Embed(title="✅ Lobby full — starting picking stage...", color=discord.Color.red())
                             await status_msg.edit(embed=embed, view=None)
                         except Exception:
                             pass
@@ -2332,7 +2430,7 @@ class EditProfileModal(discord.ui.Modal, title="Edit Profile"):
         embed = discord.Embed(
             title="✅ Profile Updated",
             description=f"Nickname: **{nick_value}**\nPlayer ID: **{pid_value}**",
-            color=discord.Color.green()
+            color=discord.Color.red()
         )
 
         # Handle nickname updates based on permissions
@@ -2418,14 +2516,22 @@ async def set_nick(interaction: discord.Interaction, nick: str):
             return
     pdata['nick'] = clean_nick
     save_players()
+    
     # Update Discord nickname where possible
-    member = interaction.user
-    if interaction.guild and not member.guild_permissions.administrator:
-        try:
-            await member.edit(nick=clean_nick)
-        except Exception:
-            pass
-    await interaction.followup.send(f"✅ Nickname updated to **{clean_nick}**.", ephemeral=True)
+    guild = interaction.guild
+    if guild:
+        member = guild.get_member(interaction.user.id)
+        if member and not member.guild_permissions.administrator:
+            try:
+                await member.edit(nick=clean_nick)
+            except discord.errors.Forbidden:
+                await interaction.followup.send(f"✅ Nickname updated to **{clean_nick}** in database.\n⚠️ I don't have permission to change your Discord nickname. Please update it manually.", ephemeral=True)
+                return
+            except Exception as e:
+                await interaction.followup.send(f"✅ Nickname updated to **{clean_nick}** in database.\n⚠️ Failed to update Discord nickname: {str(e)}", ephemeral=True)
+                return
+    
+    await interaction.followup.send(f"✅ Nickname updated to **{clean_nick}** in both database and Discord.", ephemeral=True)
 
 @bot.tree.command(name="set_id", description="Set your registered Standoff 2 ID")
 @discord.app_commands.describe(pid="Your Standoff 2 numeric ID")
@@ -2756,7 +2862,7 @@ async def stats(interaction: discord.Interaction):
             if len(recent_matches) >= 5:
                 break
                 
-        embed = discord.Embed(title=f"📊 Stats for {pdata['nick']}", color=discord.Color.blue())
+        embed = discord.Embed(title=f"📊 Stats for {pdata['nick']}", color=discord.Color.red())
         if recent_matches:
             match_lines = []
             for match in recent_matches:
@@ -2938,20 +3044,17 @@ async def timeout(interaction: discord.Interaction, user: discord.Member, minute
     
     # Create a nice embed for the timeout
     embed = discord.Embed(
-        title="🚫 User Timed Out",
+        title="🔨 User Timed Out",
         color=discord.Color.red(),
         timestamp=discord.utils.utcnow()
     )
     
-    embed.add_field(name="👤 User", value=f"{user.mention} ({user.display_name})", inline=True)
-    embed.add_field(name="⏱️ Duration", value=f"{minutes} minutes", inline=True)
-    embed.add_field(name="📅 Until", value=f"<t:{int(timeout_end)}:F>", inline=True)
-    embed.add_field(name="📝 Reason", value=reason, inline=False)
-    embed.add_field(name="👮 Moderator", value=interaction.user.mention, inline=True)
-    embed.add_field(name="🕐 Time", value=f"<t:{int(time.time())}:F>", inline=True)
+    embed.add_field(name="User", value=f"{user.mention} ({user.display_name})", inline=False)
+    embed.add_field(name="Duration", value=f"{minutes} minutes", inline=False)
+    embed.add_field(name="Reason", value=reason, inline=False)
+    embed.add_field(name="Moderator", value=interaction.user.mention, inline=False)
     
-    embed.set_thumbnail(url=user.display_avatar.url)
-    embed.set_footer(text="Arena FACEIT Moderation System")
+    embed.set_footer(text="Major FACEIT Moderation System")
     
     # Send confirmation to the command user
     await interaction.followup.send("✅ User has been timed out successfully.", ephemeral=True)
@@ -2980,7 +3083,7 @@ async def timeout_status(interaction: discord.Interaction):
         embed = discord.Embed(
             title="✅ No timeout",
             description="You are not currently timed out and can join lobbies normally.",
-            color=discord.Color.green()
+            color=discord.Color.red()
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -3066,7 +3169,7 @@ async def reset_season(interaction: discord.Interaction):
         reset_embed = discord.Embed(
             title="🔄 Resetting Season...",
             description="Please wait while the season is being reset...",
-            color=discord.Color.orange()
+            color=discord.Color.red()
         )
         await interaction.edit_original_response(embed=reset_embed, view=None)
         
@@ -3157,7 +3260,7 @@ async def reset_season(interaction: discord.Interaction):
         # Create success embed
         success_embed = discord.Embed(
             title="✅ Season Reset Complete!",
-            color=discord.Color.green()
+            color=discord.Color.red()
         )
         
         success_embed.add_field(
@@ -3233,7 +3336,7 @@ async def check_permissions(interaction: discord.Interaction):
     
     embed = discord.Embed(
         title="🔍 Permission Debug Info",
-        color=discord.Color.blue()
+        color=discord.Color.red()
     )
     
     embed.add_field(
@@ -3322,7 +3425,7 @@ async def remove_banned_players(interaction: discord.Interaction):
             embed = discord.Embed(
                 title="ℹ️ No Players to Remove Found",
                 description="There are currently no players in the database who are banned on Discord or have left the server.",
-                color=discord.Color.blue()
+                color=discord.Color.red()
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
@@ -3404,7 +3507,7 @@ async def remove_banned_players(interaction: discord.Interaction):
         removal_embed = discord.Embed(
             title="🔄 Removing Players...",
             description="Please wait while players are being removed from the database...",
-            color=discord.Color.orange()
+            color=discord.Color.red()
         )
         await interaction.edit_original_response(embed=removal_embed, view=None)
         
@@ -3435,7 +3538,7 @@ async def remove_banned_players(interaction: discord.Interaction):
         # Create success embed
         success_embed = discord.Embed(
             title="✅ Players Removed Successfully!",
-            color=discord.Color.green()
+            color=discord.Color.red()
         )
         
         success_embed.add_field(

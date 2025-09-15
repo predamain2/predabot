@@ -11,6 +11,24 @@ class General(commands.Cog):
         self.bot = bot
         self._last_leaderboard_update = 0  # Track last update time
         
+    async def _safe_clear_channel(self, channel: discord.TextChannel, limit: int = 50) -> None:
+        """Delete up to `limit` recent messages, tolerating races and missing messages."""
+        try:
+            async for message in channel.history(limit=limit):
+                try:
+                    await message.delete()
+                except (discord.NotFound, discord.Forbidden):
+                    pass
+                except discord.HTTPException:
+                    # network or rate-limit hiccup; continue best-effort
+                    pass
+        except Exception:
+            # If we can't iterate history, fall back to best-effort purge
+            try:
+                await channel.purge(limit=limit)
+            except Exception:
+                pass
+
     async def update_leaderboard_if_needed(self, guild):
         """Updates the leaderboard if enough time has passed since last update"""
         current_time = int(time.time())
@@ -19,11 +37,8 @@ class General(commands.Cog):
             self._last_leaderboard_update = current_time
             leaderboard_channel = discord.utils.get(guild.channels, name="leaderboard")
             if leaderboard_channel:
-                try:
-                    # Clear the channel
-                    await leaderboard_channel.purge()
-                except discord.errors.Forbidden:
-                    pass  # Can't purge, will just add new message
+                # Best-effort clear without failing on race conditions
+                await self._safe_clear_channel(leaderboard_channel, limit=50)
                 
             await self.post_leaderboard(guild)
         
@@ -173,14 +188,27 @@ class General(commands.Cog):
         temp_html = Path('temp_leaderboard.html')
         temp_html.write_text(html_content, encoding='utf-8')
         
-        # Convert HTML to image using Playwright
+        # Convert HTML to image using Playwright (optimized)
         from playwright.async_api import async_playwright
         
         async with async_playwright() as p:
-            browser = await p.chromium.launch()
+            # Launch browser with optimizations
+            browser = await p.chromium.launch(
+                headless=True,
+                args=[
+                    '--no-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-gpu',
+                    '--disable-web-security',
+                    '--disable-features=VizDisplayCompositor'
+                ]
+            )
             page = await browser.new_page(viewport={'width': 1000, 'height': 800})
-            await page.goto(f'file:///{temp_html.absolute()}')
-            png_data = await page.screenshot()
+            
+            # Navigate and take screenshot with timeout
+            await page.goto(f'file:///{temp_html.absolute()}', timeout=5000)
+            await page.wait_for_load_state('networkidle', timeout=3000)
+            png_data = await page.screenshot(timeout=5000)
             await browser.close()
             
             # Convert to discord.File
@@ -188,16 +216,16 @@ class General(commands.Cog):
             
             # Build embed wrapper
             embed = discord.Embed(
-                title="Arena Top 10 Players",
-                color=discord.Color.orange()
+                title="Major Esports Top 10 Players",
+                color=discord.Color.red()
             )
             embed.set_image(url="attachment://leaderboard.png")
-            embed.set_footer(text="Powered by Arena | Developed by narcissist.")
+            embed.set_footer(text="Powered by Major Esports | Developed by narcissist.")
             
             # Send to channel
             leaderboard_channel = guild.get_channel(LEADERBOARD_CHANNEL_ID)
             if leaderboard_channel:
-                await leaderboard_channel.purge(limit=5)
+                await self._safe_clear_channel(leaderboard_channel, limit=5)
                 await leaderboard_channel.send(file=file, embed=embed)
             
             # Clean up temp file
