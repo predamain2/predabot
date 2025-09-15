@@ -7,7 +7,7 @@ import time
 import config
 
 class EditMatchModal(Modal):
-    def __init__(self, match_id, player_name, current_kills, current_assists, current_deaths, current_elo, bot):
+    def __init__(self, match_id, player_name, current_kills, current_assists, current_deaths, current_elo_change, bot):
         super().__init__(title=f"Edit Stats for {player_name}")
         self.match_id = match_id
         self.player_name = player_name
@@ -15,26 +15,26 @@ class EditMatchModal(Modal):
         self.kills = TextInput(label="Kills", default=str(current_kills), required=True, min_length=1, max_length=3)
         self.assists = TextInput(label="Assists", default=str(current_assists), required=True, min_length=1, max_length=3)
         self.deaths = TextInput(label="Deaths", default=str(current_deaths), required=True, min_length=1, max_length=3)
-        self.elo = TextInput(label="ELO", default=str(current_elo), required=True, min_length=1, max_length=5)
+        self.elo_change = TextInput(label="ELO Change (+/-)", default=str(current_elo_change), required=True, min_length=1, max_length=6)
         self.add_item(self.kills)
         self.add_item(self.assists)
         self.add_item(self.deaths)
-        self.add_item(self.elo)
+        self.add_item(self.elo_change)
         
     async def on_submit(self, interaction: discord.Interaction):
         # Confirmation step before saving
-        confirm_view = ConfirmEditView(self.match_id, self.player_name, self.kills.value, self.assists.value, self.deaths.value, self.elo.value, self.bot)
+        confirm_view = ConfirmEditView(self.match_id, self.player_name, self.kills.value, self.assists.value, self.deaths.value, self.elo_change.value, self.bot)
         await interaction.response.send_message(f"Confirm changes for {self.player_name}?", view=confirm_view, ephemeral=True)
 
 class ConfirmEditView(View):
-    def __init__(self, match_id, player_name, kills, assists, deaths, elo, bot):
+    def __init__(self, match_id, player_name, kills, assists, deaths, elo_change, bot):
         super().__init__(timeout=60)
         self.match_id = match_id
         self.player_name = player_name
         self.kills = kills
         self.assists = assists
         self.deaths = deaths
-        self.elo = elo
+        self.elo_change = elo_change
         self.bot = bot
 
     @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success)
@@ -42,21 +42,72 @@ class ConfirmEditView(View):
         try:
             with open("results.json", "r") as f:
                 results = json.load(f)
+            with open("players.json", "r") as f:
+                player_data = json.load(f)
             match_data = results[self.match_id]
             updated = False
+            old_elo_change = 0
+            team_name = None
             for team in ["winning_team", "losing_team"]:
                 for player in match_data[team]:
-                    if player["name"] == self.player_name:
+                    if player["name"].lower() == self.player_name.lower():
+                        old_elo_change = int(player.get("elo_change", 0))
                         player["kills"] = int(self.kills)
                         player["assists"] = int(self.assists)
                         player["deaths"] = int(self.deaths)
-                        player["elo"] = int(self.elo)
+                        player["elo_change"] = int(self.elo_change)
+                        # Recompute KD
+                        kd = int(self.kills) if int(self.deaths) == 0 else round(int(self.kills) / int(self.deaths), 2)
+                        player["kd"] = kd
                         updated = True
+                        team_name = team
                         break
                 if updated:
                     break
+            if not updated:
+                await interaction.response.send_message("Player not found in match.", ephemeral=True)
+                return
+
+            # Apply delta elo_change to players.json
+            delta = int(self.elo_change) - old_elo_change
+            # Resolve player's discord id from results entry (preferred) or by nick lookup
+            target_discord_id = None
+            for t in ["winning_team", "losing_team"]:
+                for p in match_data[t]:
+                    if p.get("name", "").lower() == self.player_name.lower():
+                        target_discord_id = p.get("discord_id")
+                        break
+                if target_discord_id:
+                    break
+            # Find player record
+            player_record = None
+            player_key = None
+            if target_discord_id and target_discord_id in player_data:
+                player_key = target_discord_id
+                player_record = player_data[target_discord_id]
+            else:
+                for pid, pdata in player_data.items():
+                    if pdata.get("nick", "").lower() == self.player_name.lower():
+                        player_key = pid
+                        player_record = pdata
+                        break
+            if player_record:
+                current_elo = int(player_record.get("elo", getattr(config, "DEFAULT_ELO", 100)))
+                new_elo = max(getattr(config, "DEFAULT_ELO", 100), current_elo + delta)
+                player_record["elo"] = new_elo
+                # wins/losses remain unchanged by stat edits here
+                # update level
+                try:
+                    player_record["level"] = config.get_level_from_elo(new_elo)
+                except Exception:
+                    pass
+                player_data[player_key] = player_record
+                with open("players.json", "w") as f:
+                    json.dump(player_data, f, indent=2)
+
             with open("results.json", "w") as f:
                 json.dump(results, f, indent=2)
+
             await interaction.response.send_message(f"✅ Changes saved for {self.player_name}. Reposting updated results…", ephemeral=True)
 
             # Delete old message in game-results and resend edited one
@@ -174,37 +225,37 @@ class PlayerSelect(View):
         # Create select menu with all players
         select = discord.ui.Select(placeholder="Choose a player")
         
-        # Prefer ELO from this match's stored data (results.json), falling back to 100
-        def elo_for_name(name):
+        # Prefer existing elo_change from match data, fallback to 0
+        def elo_change_for_name(name):
             for team in ["winning_team", "losing_team"]:
                 for p in self.match_data.get(team, []):
                     if p.get("name", "").lower() == name.lower():
                         try:
-                            return int(p.get("elo", 100))
+                            return int(p.get("elo_change", 0))
                         except Exception:
-                            return 100
-            return 100
+                            return 0
+            return 0
 
         # Add players from both teams
         for team in ["winning_team", "losing_team"]:
             for player in match_data[team]:
                 select.add_option(
                     label=player["name"],
-                    value=f"{player['name']}|{player['kills']}|{player['assists']}|{player['deaths']}|{elo_for_name(player['name'])}"
+                    value=f"{player['name']}|{player['kills']}|{player['assists']}|{player['deaths']}|{elo_change_for_name(player['name'])}"
                 )
         
         select.callback = self.select_callback
         self.add_item(select)
         
     async def select_callback(self, interaction: discord.Interaction):
-        player_name, kills, assists, deaths, elo = interaction.data["values"][0].split("|")
+        player_name, kills, assists, deaths, elo_change = interaction.data["values"][0].split("|")
         modal = EditMatchModal(
             self.match_id,
             player_name,
             int(kills),
             int(assists),
             int(deaths),
-            int(elo),
+            int(elo_change),
             self.bot
         )
         await interaction.response.send_modal(modal)
@@ -345,7 +396,7 @@ def create_updated_embed(match_data, player_data, match_id):
             f"**Score:** {match_data['score']}\n"
             f"**MVP:** {match_data.get('mvp', 'None')} ({match_data.get('mvp_kills', 0)} kills) 🏆\n"
         ),
-        color=discord.Color.blue()
+        color=discord.Color.red()
     )
     
     def get_elo_for_name(name):
@@ -423,7 +474,7 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
                 embed = discord.Embed(
                     title="📋 Active Submissions",
                     description="No matches are currently being submitted.",
-                    color=discord.Color.green()
+                    color=discord.Color.red()
                 )
                 await interaction.response.send_message(embed=embed, ephemeral=True)
                 return
@@ -431,7 +482,7 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
             embed = discord.Embed(
                 title="📋 Active Submissions",
                 description="Currently submitting matches:",
-                color=discord.Color.orange()
+                color=discord.Color.red()
             )
             
             # Add active submissions
@@ -592,7 +643,7 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
             embed = discord.Embed(
                 title="📋 Available Matches",
                 description=f"Found {len(results)} matches in the database:",
-                color=discord.Color.blue()
+                color=discord.Color.red()
             )
             
             # Show match IDs with their details
@@ -693,29 +744,58 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
             # Revert player stats and ELO
             for team in ["winning_team", "losing_team"]:
                 for player in match_data[team]:
-                    player_name = player["name"]
-                    elo_change = player.get("elo_change", 0)
-                    
-                    # Find player in player_data
-                    for player_id, data in player_data.items():
-                        if data["nick"].lower() == player_name.lower():
-                            # Revert wins/losses
-                            if team == "winning_team":
-                                data["wins"] = max(0, data["wins"] - 1)
-                            else:
-                                data["losses"] = max(0, data["losses"] - 1)
-                            
-                            # Revert ELO change
-                            current_elo = data.get("elo", config.DEFAULT_ELO)
-                            new_elo = current_elo - elo_change
-                            data["elo"] = max(config.DEFAULT_ELO, new_elo)
-                            
-                            # Recalculate level based on new ELO
-                            new_level = config.get_level_from_elo(data["elo"])
-                            data["level"] = new_level
-                            
-                            print(f"Reverted {player_name}: ELO {current_elo} -> {data['elo']}, Level -> {new_level}")
-                            break
+                    player_name = player.get("name")
+                    elo_change = int(player.get("elo_change", 0))
+                    discord_id = player.get("discord_id")
+
+                    # Find player in player_data by discord_id first, else by nick
+                    player_key = None
+                    pdata = None
+                    if discord_id and discord_id in player_data:
+                        player_key = discord_id
+                        pdata = player_data[discord_id]
+                    else:
+                        for pid, d in player_data.items():
+                            if d.get("nick", "").lower() == str(player_name).lower():
+                                player_key = pid
+                                pdata = d
+                                break
+
+                    if pdata is None:
+                        continue
+
+                    # Revert wins/losses
+                    if team == "winning_team":
+                        pdata["wins"] = max(0, int(pdata.get("wins", 0)) - 1)
+                    else:
+                        pdata["losses"] = max(0, int(pdata.get("losses", 0)) - 1)
+
+                    # Revert ELO change using elo_change; fallback: if player's result has absolute 'elo', infer delta
+                    delta = elo_change
+                    if delta == 0:
+                        try:
+                            # Infer change if absolute elo present and close to current
+                            absolute = int(player.get("elo", 0))
+                            current = int(pdata.get("elo", getattr(config, "DEFAULT_ELO", 100)))
+                            # If absolute equals current, we can't know baseline; skip
+                            # Else, guess delta as current - absolute
+                            guess = current - absolute
+                            # Only apply if reasonable magnitude
+                            if -300 <= guess <= 300:
+                                delta = guess
+                        except Exception:
+                            pass
+
+                    current_elo = int(pdata.get("elo", getattr(config, "DEFAULT_ELO", 100)))
+                    new_elo = max(getattr(config, "DEFAULT_ELO", 100), current_elo - delta)
+                    pdata["elo"] = new_elo
+
+                    try:
+                        pdata["level"] = config.get_level_from_elo(new_elo)
+                    except Exception:
+                        pass
+
+                    player_data[player_key] = pdata
 
             # Save updated player stats
             with open("players.json", "w") as f:
@@ -873,6 +953,8 @@ class EditPlayerStatsModal(Modal):
             # Load match data
             with open("results.json", "r") as f:
                 results = json.load(f)
+            with open("players.json", "r") as f:
+                players = json.load(f)
             
             match_data = results[self.match_id]
             updated = False
@@ -885,7 +967,7 @@ class EditPlayerStatsModal(Modal):
                         old_kills = player["kills"]
                         old_assists = player["assists"]
                         old_deaths = player["deaths"]
-                        old_elo_change = player.get("elo_change", 0)
+                        old_elo_change = int(player.get("elo_change", 0))
                         
                         # Update stats
                         player["kills"] = kills
@@ -909,6 +991,46 @@ class EditPlayerStatsModal(Modal):
             # Save the updated results
             with open("results.json", "w") as f:
                 json.dump(results, f, indent=2)
+
+            # Apply ELO delta to players.json
+            try:
+                delta = int(elo_change) - int(old_elo_change)
+            except Exception:
+                delta = 0
+
+            # Resolve player's discord id from match data if possible
+            target_discord_id = None
+            for t in ["winning_team", "losing_team"]:
+                for p in match_data[t]:
+                    if p.get("name", "").lower() == self.player_name.lower():
+                        target_discord_id = p.get("discord_id")
+                        break
+                if target_discord_id:
+                    break
+
+            player_key = None
+            player_record = None
+            if target_discord_id and target_discord_id in players:
+                player_key = target_discord_id
+                player_record = players[target_discord_id]
+            else:
+                for pid, pdata in players.items():
+                    if pdata.get("nick", "").lower() == self.player_name.lower():
+                        player_key = pid
+                        player_record = pdata
+                        break
+
+            if player_record is not None and delta != 0:
+                current_elo = int(player_record.get("elo", getattr(config, "DEFAULT_ELO", 100)))
+                new_elo = max(getattr(config, "DEFAULT_ELO", 100), current_elo + delta)
+                player_record["elo"] = new_elo
+                try:
+                    player_record["level"] = config.get_level_from_elo(new_elo)
+                except Exception:
+                    pass
+                players[player_key] = player_record
+                with open("players.json", "w") as f:
+                    json.dump(players, f, indent=2)
 
             # Repost the updated results
             await repost_game_results(self.bot, interaction.guild, self.match_id, match_data)
