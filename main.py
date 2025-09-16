@@ -3028,10 +3028,25 @@ async def party_kick(interaction: discord.Interaction, player: discord.Member):
     await interaction.followup.send(f"Kicked <@{kicked_id}> from your party.", ephemeral=True)
 @bot.tree.command(name="timeout", description="Timeout a user from the voice channel")
 @staff_mod_owner_only()
-@discord.app_commands.describe(user="The user to timeout", minutes="Timeout duration in minutes", reason="Reason for the timeout")
-async def timeout(interaction: discord.Interaction, user: discord.Member, minutes: int = 5, reason: str = "No reason provided"):
+@discord.app_commands.describe(
+    user="The user to timeout", 
+    days="Timeout duration in days (optional)", 
+    hours="Timeout duration in hours (optional)", 
+    minutes="Timeout duration in minutes", 
+    reason="Reason for the timeout"
+)
+async def timeout(interaction: discord.Interaction, user: discord.Member, days: int = 0, hours: int = 0, minutes: int = 5, reason: str = "No reason provided"):
     await interaction.response.defer(ephemeral=True)
-    timeout_end = time.time() + minutes * 60
+    
+    # Calculate total timeout duration in seconds
+    total_seconds = (days * 24 * 60 * 60) + (hours * 60 * 60) + (minutes * 60)
+    
+    # Ensure minimum timeout of 1 minute if all values are 0
+    if total_seconds == 0:
+        total_seconds = 5 * 60  # Default to 5 minutes
+        days, hours, minutes = 0, 0, 5
+    
+    timeout_end = time.time() + total_seconds
     timeouts[str(user.id)] = timeout_end
     save_timeouts()
     
@@ -3049,8 +3064,19 @@ async def timeout(interaction: discord.Interaction, user: discord.Member, minute
         timestamp=discord.utils.utcnow()
     )
     
+    # Format duration string
+    duration_parts = []
+    if days > 0:
+        duration_parts.append(f"{days} day{'s' if days != 1 else ''}")
+    if hours > 0:
+        duration_parts.append(f"{hours} hour{'s' if hours != 1 else ''}")
+    if minutes > 0:
+        duration_parts.append(f"{minutes} minute{'s' if minutes != 1 else ''}")
+    
+    duration_str = ", ".join(duration_parts) if duration_parts else "5 minutes"
+    
     embed.add_field(name="User", value=f"{user.mention} ({user.display_name})", inline=False)
-    embed.add_field(name="Duration", value=f"{minutes} minutes", inline=False)
+    embed.add_field(name="Duration", value=duration_str, inline=False)
     embed.add_field(name="Reason", value=reason, inline=False)
     embed.add_field(name="Moderator", value=interaction.user.mention, inline=False)
     
@@ -3070,12 +3096,31 @@ async def timeout(interaction: discord.Interaction, user: discord.Member, minute
 async def timeout_status(interaction: discord.Interaction):
     if is_player_timed_out(interaction.user.id):
         remaining = get_timeout_remaining(interaction.user.id)
-        minutes = remaining // 60
-        seconds = remaining % 60
+        
+        # Calculate days, hours, minutes, and seconds
+        days = remaining // (24 * 60 * 60)
+        remaining_after_days = remaining % (24 * 60 * 60)
+        hours = remaining_after_days // (60 * 60)
+        remaining_after_hours = remaining_after_days % (60 * 60)
+        minutes = remaining_after_hours // 60
+        seconds = remaining_after_hours % 60
+        
+        # Format time remaining string
+        time_parts = []
+        if days > 0:
+            time_parts.append(f"{days}d")
+        if hours > 0:
+            time_parts.append(f"{hours}h")
+        if minutes > 0:
+            time_parts.append(f"{minutes}m")
+        if seconds > 0 or not time_parts:  # Show seconds if it's the only unit or if no other units
+            time_parts.append(f"{seconds}s")
+        
+        time_remaining_str = " ".join(time_parts)
         
         embed = discord.Embed(
             title="🚫 You are timed out",
-            description=f"You cannot join lobbies for leaving during an active session.\n\nTime remaining: {minutes}m {seconds}s",
+            description=f"You cannot join lobbies for leaving during an active session.\n\nTime remaining: {time_remaining_str}",
             color=discord.Color.red()
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
