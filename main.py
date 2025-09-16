@@ -3632,10 +3632,44 @@ async def set_winner(interaction: discord.Interaction, match_id: str, winner: in
                     color=discord.Color.red()
                 )
 
-                # Add image
+                # Add team fields to embed (exclude K: and D: since they're always 0 for /winner command)
+                def get_elo_for_name(name):
+                    for v in player_data.values():
+                        if v["nick"].lower() == name.lower():
+                            return v.get("elo", config.DEFAULT_ELO)
+                    return config.DEFAULT_ELO
+
+                def format_player_line_winner(p):
+                    name = p['name']
+                    elo_change = p.get('elo_change', 0)
+                    current_elo = get_elo_for_name(name)
+                    before_elo = current_elo - elo_change
+                    elo_change_str = f"+{elo_change}" if elo_change >= 0 else str(elo_change)
+                    return f"**{name}** {before_elo} → {current_elo} | {elo_change_str}"
+
+                embed.add_field(
+                    name="Winning Team",
+                    value="\n".join(format_player_line_winner(p) for p in winning_team_entries) or "—",
+                    inline=False
+                )
+                embed.add_field(
+                    name="Losing Team", 
+                    value="\n".join(format_player_line_winner(p) for p in losing_team_entries) or "—",
+                    inline=False
+                )
+
+                # Add image and footer
                 file = discord.File(output_file)
                 embed.set_image(url="attachment://" + output_file)
-                await dest.send(file=file, embed=embed)
+                
+                # Different footer for staff channel (matching regular submission behavior)
+                if channel_id == staff_results_id:
+                    embed.set_footer(text="Powered by Major Esports | Developed by narcissist.")
+                    # Note: StaffMatchControls view not added for /winner command to keep it simpler
+                    await dest.send(file=file, embed=embed)
+                else:
+                    embed.set_footer(text="Powered by Major Esports | Developed by narcissist.")
+                    await dest.send(file=file, embed=embed)
 
                 # Clean up the PNG file after sending
                 try:
@@ -3645,7 +3679,47 @@ async def set_winner(interaction: discord.Interaction, match_id: str, winner: in
             except Exception as e:
                 print(f"Failed to post manual scoreboard for match {match_id} in channel {channel_id}: {e}")
                 try:
-                    await dest.send(embed=discord.Embed(title="📊 Match Results", description=f"**Match ID:** `{match_id}`\n**Winner:** {'CT' if declared_winner_ct else 'T'}\n**Score:** {score}", color=discord.Color.red()))
+                    # Fallback embed without image but with team fields (no K: D: stats)
+                    fallback_embed = discord.Embed(
+                        title="📊 Match Results", 
+                        description=(
+                            f"**Match ID:** `{match_id}`\n"
+                            f"**Winner:** {'CT' if declared_winner_ct else 'T'}\n"
+                            f"**Score:** {score}\n"
+                            f"**MVP:** None\n"
+                            f"**Submitted by:** {interaction.user.mention}\n"
+                        ), 
+                        color=discord.Color.red()
+                    )
+                    
+                    # Add team fields without K: D: stats
+                    def get_elo_for_name_fallback(name):
+                        for v in player_data.values():
+                            if v["nick"].lower() == name.lower():
+                                return v.get("elo", config.DEFAULT_ELO)
+                        return config.DEFAULT_ELO
+
+                    def format_player_line_winner_fallback(p):
+                        name = p['name']
+                        elo_change = p.get('elo_change', 0)
+                        current_elo = get_elo_for_name_fallback(name)
+                        before_elo = current_elo - elo_change
+                        elo_change_str = f"+{elo_change}" if elo_change >= 0 else str(elo_change)
+                        return f"**{name}** {before_elo} → {current_elo} | {elo_change_str}"
+
+                    fallback_embed.add_field(
+                        name="Winning Team",
+                        value="\n".join(format_player_line_winner_fallback(p) for p in winning_team_entries) or "—",
+                        inline=False
+                    )
+                    fallback_embed.add_field(
+                        name="Losing Team",
+                        value="\n".join(format_player_line_winner_fallback(p) for p in losing_team_entries) or "—",
+                        inline=False
+                    )
+                    
+                    fallback_embed.set_footer(text="Powered by Major Esports | Developed by narcissist.")
+                    await dest.send(embed=fallback_embed)
                 except Exception:
                     pass
 
