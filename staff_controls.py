@@ -135,6 +135,7 @@ class StaffMatchControls(View):
                 return
 
             # Revert player stats and ELO (prefer discord_id, fallback to name; infer delta if needed)
+            reverted_players = []
             for team in ["winning_team", "losing_team"]:
                 for player in match_data[team]:
                     player_name = player.get("name")
@@ -144,24 +145,35 @@ class StaffMatchControls(View):
                     # Find player in player_data by discord_id first, else by nick
                     player_key = None
                     pdata = None
+                    
+                    # Try discord_id first (convert to string since player_data keys are strings)
                     if discord_id and str(discord_id) in player_data:
                         player_key = str(discord_id)
                         pdata = player_data[player_key]
+                        print(f"Found player by discord_id: {player_name} ({player_key})")
                     else:
+                        # Fallback to nickname matching
                         for pid, d in player_data.items():
                             if d.get("nick", "").lower() == str(player_name).lower():
                                 player_key = pid
                                 pdata = d
+                                print(f"Found player by nickname: {player_name} -> {pid}")
                                 break
 
                     if pdata is None:
+                        print(f"⚠️ Could not find player data for: {player_name} (discord_id: {discord_id})")
                         continue
+
+                    # Store original values for logging
+                    original_elo = int(pdata.get("elo", getattr(config, "DEFAULT_ELO", 100)))
+                    original_wins = int(pdata.get("wins", 0))
+                    original_losses = int(pdata.get("losses", 0))
 
                     # Revert wins/losses
                     if team == "winning_team":
-                        pdata["wins"] = max(0, int(pdata.get("wins", 0)) - 1)
+                        pdata["wins"] = max(0, original_wins - 1)
                     else:
-                        pdata["losses"] = max(0, int(pdata.get("losses", 0)) - 1)
+                        pdata["losses"] = max(0, original_losses - 1)
 
                     # Revert ELO change using elo_change; fallback: infer from absolute elo if present
                     delta = elo_change
@@ -172,6 +184,7 @@ class StaffMatchControls(View):
                             guess = current - absolute
                             if -300 <= guess <= 300:
                                 delta = guess
+                                print(f"Inferred ELO delta for {player_name}: {delta}")
                         except Exception:
                             pass
 
@@ -185,6 +198,12 @@ class StaffMatchControls(View):
                         pass
 
                     player_data[player_key] = pdata
+                    
+                    # Log the reversion for debugging
+                    reverted_players.append(f"{player_name}: ELO {original_elo} -> {new_elo} (delta: -{delta})")
+                    print(f"Reverted {player_name}: ELO {original_elo} -> {new_elo}, W/L: {original_wins}/{original_losses} -> {pdata['wins']}/{pdata['losses']}")
+            
+            print(f"Total players reverted: {len(reverted_players)}")
 
             # Save updated player stats
             with open("players.json", "w") as f:
@@ -217,15 +236,19 @@ class StaffMatchControls(View):
             if general_cog:
                 await general_cog.update_leaderboard()
 
-            await interaction.response.send_message(
-                f"✅ Match {self.match_id} has been reverted:\n"
-                f"• Removed from results database\n"
-                f"• Player stats and ELO reverted\n"
-                f"• Embeds deleted from results channels\n"
-                f"• Leaderboard refreshed\n"
-                f"• Match ID can be submitted again", 
-                ephemeral=True
-            )
+            revert_summary = f"✅ Match {self.match_id} has been reverted:\n" \
+                           f"• Removed from results database\n" \
+                           f"• Player stats and ELO reverted for {len(reverted_players)} players\n" \
+                           f"• Embeds deleted from results channels\n" \
+                           f"• Leaderboard refreshed\n" \
+                           f"• Match ID can be submitted again"
+            
+            if reverted_players:
+                revert_summary += f"\n\n**Reverted Players:**\n" + "\n".join(reverted_players[:10])  # Limit to 10 players for message length
+                if len(reverted_players) > 10:
+                    revert_summary += f"\n... and {len(reverted_players) - 10} more"
+            
+            await interaction.response.send_message(revert_summary, ephemeral=True)
         except Exception as e:
             await interaction.response.send_message(f"Error reverting scoreboard: {str(e)}", ephemeral=True)
     def __init__(self, match_id, match_data, bot):
@@ -767,6 +790,7 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
             match_data = results[actual_match_id]
 
             # Revert player stats and ELO
+            reverted_players = []
             for team in ["winning_team", "losing_team"]:
                 for player in match_data[team]:
                     player_name = player.get("name")
@@ -776,24 +800,35 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
                     # Find player in player_data by discord_id first, else by nick
                     player_key = None
                     pdata = None
-                    if discord_id and discord_id in player_data:
-                        player_key = discord_id
-                        pdata = player_data[discord_id]
+                    
+                    # Try discord_id first (convert to string since player_data keys are strings)
+                    if discord_id and str(discord_id) in player_data:
+                        player_key = str(discord_id)
+                        pdata = player_data[player_key]
+                        print(f"Found player by discord_id: {player_name} ({player_key})")
                     else:
+                        # Fallback to nickname matching
                         for pid, d in player_data.items():
                             if d.get("nick", "").lower() == str(player_name).lower():
                                 player_key = pid
                                 pdata = d
+                                print(f"Found player by nickname: {player_name} -> {pid}")
                                 break
 
                     if pdata is None:
+                        print(f"⚠️ Could not find player data for: {player_name} (discord_id: {discord_id})")
                         continue
+
+                    # Store original values for logging
+                    original_elo = int(pdata.get("elo", getattr(config, "DEFAULT_ELO", 100)))
+                    original_wins = int(pdata.get("wins", 0))
+                    original_losses = int(pdata.get("losses", 0))
 
                     # Revert wins/losses
                     if team == "winning_team":
-                        pdata["wins"] = max(0, int(pdata.get("wins", 0)) - 1)
+                        pdata["wins"] = max(0, original_wins - 1)
                     else:
-                        pdata["losses"] = max(0, int(pdata.get("losses", 0)) - 1)
+                        pdata["losses"] = max(0, original_losses - 1)
 
                     # Revert ELO change using elo_change; fallback: if player's result has absolute 'elo', infer delta
                     delta = elo_change
@@ -808,6 +843,7 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
                             # Only apply if reasonable magnitude
                             if -300 <= guess <= 300:
                                 delta = guess
+                                print(f"Inferred ELO delta for {player_name}: {delta}")
                         except Exception:
                             pass
 
@@ -821,6 +857,12 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
                         pass
 
                     player_data[player_key] = pdata
+                    
+                    # Log the reversion for debugging
+                    reverted_players.append(f"{player_name}: ELO {original_elo} -> {new_elo} (delta: -{delta})")
+                    print(f"Reverted {player_name}: ELO {original_elo} -> {new_elo}, W/L: {original_wins}/{original_losses} -> {pdata['wins']}/{pdata['losses']}")
+            
+            print(f"Total players reverted: {len(reverted_players)}")
 
             # Save updated player stats
             with open("players.json", "w") as f:
@@ -862,7 +904,7 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
             success_parts = [
                 f"✅ Match {actual_match_id} has been reverted:",
                 "• Removed from results database",
-                "• Player stats and ELO reverted", 
+                f"• Player stats and ELO reverted for {len(reverted_players)} players", 
                 "• Embeds deleted from results channels"
             ]
             
@@ -871,7 +913,12 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
             else:
                 success_parts.append("• Leaderboard update skipped (cog not available)")
                 
-            success_parts.append("The match ID can be submitted again.")
+            success_parts.append("• The match ID can be submitted again")
+            
+            if reverted_players:
+                success_parts.append(f"\n**Reverted Players:**\n" + "\n".join(reverted_players[:10]))  # Limit to 10 players for message length
+                if len(reverted_players) > 10:
+                    success_parts.append(f"... and {len(reverted_players) - 10} more")
 
             await interaction.response.send_message(
                 "\n".join(success_parts), 
