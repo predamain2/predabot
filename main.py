@@ -1055,8 +1055,8 @@ async def announce_teams_final(channel: discord.TextChannel, match_id, chosen_ma
     # Create the host profile button view
     view = HostInfoView(host_mention, host_name, host_id)
     
-    # Update lobby status to prevent waiting message from appearing
-    lobby_status[channel.id] = {"state": "match_created", "message_id": None}
+    # Reset lobby status to allow waiting message to appear after match
+    lobby_status[channel.id] = {"state": "waiting", "message_id": None}
     
     # Send new message instead of editing existing one to ensure proper embed display
     print("Debug - Sending match announcement message")
@@ -2005,12 +2005,8 @@ async def on_voice_state_update(member, before, after):
         status = lobby_status.get(text_channel.id, {})
         current_state = status.get("state", "")
         
-        if current_state in {"picking", "mapban", "match_created"}:
-            # For match_created state, don't create waiting embed
-            if current_state == "match_created":
-                return
-            
-            # Verify other states are truly active
+        if current_state in {"picking", "mapban"}:
+            # Verify it's truly active
             is_active = False
             if current_state == "picking" and active_picks.get(text_channel.id):
                 is_active = True
@@ -2100,12 +2096,8 @@ async def on_voice_state_update(member, before, after):
             if not msg:
                 # If a match flow is active, avoid creating a new waiting message to prevent it from appearing on top
                 current_state = status.get("state")
-                if current_state in {"picking", "mapban", "match_created"}:
-                    # For match_created state, don't create waiting embed
-                    if current_state == "match_created":
-                        return
-                    
-                    # Verify other states are truly active; if stale, reset to waiting
+                if current_state in {"picking", "mapban"}:
+                    # Verify it's truly active; if stale, reset to waiting
                     is_active = False
                     if current_state == "picking" and active_picks.get(text_channel.id):
                         is_active = True
