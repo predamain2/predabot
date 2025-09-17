@@ -1042,34 +1042,26 @@ async def announce_teams_final(channel: discord.TextChannel, match_id, chosen_ma
     # Create the Discord attachment
     file = discord.File(image_file)
     
-    # Create an empty embed with just the button hint
+    # Create embed with match title, template image, and host button
     embed = discord.Embed(
-        description="Click the button below to see host information",
+        title=f"Match #{match_id}",
+        description="Click the button below to get host information",
         color=discord.Color.red()
     )
+    
+    # Set the template image as the embed image
+    embed.set_image(url=f"attachment://{image_file}")
     
     # Create the host profile button view
     view = HostInfoView(host_mention, host_name, host_id)
     
-    # Replace or create the announcement message
-    msg_id = lobby_status.get(channel.id, {}).get("message_id")
-    print(f"Debug - Message ID: {msg_id}")
+    # Reset lobby status to allow waiting message to appear after match
+    lobby_status[channel.id] = {"state": "waiting", "message_id": None}
     
-    try:
-        if msg_id:
-            print("Debug - Attempting to edit existing message")
-            msg = await channel.fetch_message(msg_id)
-            await msg.edit(embed=embed, attachments=[file], view=view, content=None)
-            print("Debug - Message edited successfully")
-        else:
-            print("Debug - Sending new message")
-            msg = await channel.send(embed=embed, file=file, view=view)
-            print("Debug - New message sent")
-    except Exception as e:
-        print(f"Debug - Error handling message: {e}")
-        print("Debug - Sending new message as fallback")
-        msg = await channel.send(embed=embed, file=file, view=view)
-        print("Debug - New message sent")
+    # Send new message instead of editing existing one to ensure proper embed display
+    print("Debug - Sending match announcement message")
+    msg = await channel.send(embed=embed, file=file, view=view)
+    print("Debug - Match announcement sent successfully")
 
     # Clean up the temporary files
     try:
