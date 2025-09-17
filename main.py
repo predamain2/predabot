@@ -1042,34 +1042,26 @@ async def announce_teams_final(channel: discord.TextChannel, match_id, chosen_ma
     # Create the Discord attachment
     file = discord.File(image_file)
     
-    # Create an empty embed with just the button hint
+    # Create embed with match title, template image, and host button
     embed = discord.Embed(
-        description="Click the button below to see host information",
+        title=f"Match #{match_id}",
+        description="Click the button below to get host information",
         color=discord.Color.red()
     )
+    
+    # Set the template image as the embed image
+    embed.set_image(url=f"attachment://{image_file}")
     
     # Create the host profile button view
     view = HostInfoView(host_mention, host_name, host_id)
     
-    # Replace or create the announcement message
-    msg_id = lobby_status.get(channel.id, {}).get("message_id")
-    print(f"Debug - Message ID: {msg_id}")
+    # Update lobby status to prevent waiting message from appearing
+    lobby_status[channel.id] = {"state": "match_created", "message_id": None}
     
-    try:
-        if msg_id:
-            print("Debug - Attempting to edit existing message")
-            msg = await channel.fetch_message(msg_id)
-            await msg.edit(embed=embed, attachments=[file], view=view, content=None)
-            print("Debug - Message edited successfully")
-        else:
-            print("Debug - Sending new message")
-            msg = await channel.send(embed=embed, file=file, view=view)
-            print("Debug - New message sent")
-    except Exception as e:
-        print(f"Debug - Error handling message: {e}")
-        print("Debug - Sending new message as fallback")
-        msg = await channel.send(embed=embed, file=file, view=view)
-        print("Debug - New message sent")
+    # Send new message instead of editing existing one to ensure proper embed display
+    print("Debug - Sending match announcement message")
+    msg = await channel.send(embed=embed, file=file, view=view)
+    print("Debug - Match announcement sent successfully")
 
     # Clean up the temporary files
     try:
@@ -2013,8 +2005,12 @@ async def on_voice_state_update(member, before, after):
         status = lobby_status.get(text_channel.id, {})
         current_state = status.get("state", "")
         
-        if current_state in {"picking", "mapban"}:
-            # Verify it's truly active
+        if current_state in {"picking", "mapban", "match_created"}:
+            # For match_created state, don't create waiting embed
+            if current_state == "match_created":
+                return
+            
+            # Verify other states are truly active
             is_active = False
             if current_state == "picking" and active_picks.get(text_channel.id):
                 is_active = True
@@ -2104,8 +2100,12 @@ async def on_voice_state_update(member, before, after):
             if not msg:
                 # If a match flow is active, avoid creating a new waiting message to prevent it from appearing on top
                 current_state = status.get("state")
-                if current_state in {"picking", "mapban"}:
-                    # Verify it's truly active; if stale, reset to waiting
+                if current_state in {"picking", "mapban", "match_created"}:
+                    # For match_created state, don't create waiting embed
+                    if current_state == "match_created":
+                        return
+                    
+                    # Verify other states are truly active; if stale, reset to waiting
                     is_active = False
                     if current_state == "picking" and active_picks.get(text_channel.id):
                         is_active = True
