@@ -175,22 +175,20 @@ class StaffMatchControls(View):
                     else:
                         pdata["losses"] = max(0, original_losses - 1)
 
-                    # Revert ELO change using elo_change; fallback: infer from absolute elo if present
-                    delta = elo_change
-                    if delta == 0:
-                        try:
-                            absolute = int(player.get("elo", 0))
-                            current = int(pdata.get("elo", getattr(config, "DEFAULT_ELO", 100)))
-                            guess = current - absolute
-                            if -300 <= guess <= 300:
-                                delta = guess
-                                print(f"Inferred ELO delta for {player_name}: {delta}")
-                        except Exception:
-                            pass
-
-                    current_elo = int(pdata.get("elo", getattr(config, "DEFAULT_ELO", 100)))
-                    new_elo = max(getattr(config, "DEFAULT_ELO", 100), current_elo - delta)
-                    pdata["elo"] = new_elo
+                    # Restore ELO to the exact pre-match value stored in match data
+                    # The 'elo' field in match data contains the ELO AFTER the match was applied
+                    # So we need to calculate the pre-match ELO by subtracting the elo_change
+                    stored_post_match_elo = int(player.get("elo", 0))
+                    elo_change_applied = int(player.get("elo_change", 0))
+                    
+                    # Calculate what the ELO was BEFORE this match
+                    pre_match_elo = stored_post_match_elo - elo_change_applied
+                    
+                    # Restore to pre-match ELO (don't apply minimum constraint during revert)
+                    pdata["elo"] = pre_match_elo
+                    new_elo = pre_match_elo
+                    
+                    print(f"Restoring {player_name}: stored_post={stored_post_match_elo}, change={elo_change_applied}, restored_to={pre_match_elo}")
 
                     try:
                         pdata["level"] = config.get_level_from_elo(new_elo)
@@ -830,26 +828,20 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
                     else:
                         pdata["losses"] = max(0, original_losses - 1)
 
-                    # Revert ELO change using elo_change; fallback: if player's result has absolute 'elo', infer delta
-                    delta = elo_change
-                    if delta == 0:
-                        try:
-                            # Infer change if absolute elo present and close to current
-                            absolute = int(player.get("elo", 0))
-                            current = int(pdata.get("elo", getattr(config, "DEFAULT_ELO", 100)))
-                            # If absolute equals current, we can't know baseline; skip
-                            # Else, guess delta as current - absolute
-                            guess = current - absolute
-                            # Only apply if reasonable magnitude
-                            if -300 <= guess <= 300:
-                                delta = guess
-                                print(f"Inferred ELO delta for {player_name}: {delta}")
-                        except Exception:
-                            pass
-
-                    current_elo = int(pdata.get("elo", getattr(config, "DEFAULT_ELO", 100)))
-                    new_elo = max(getattr(config, "DEFAULT_ELO", 100), current_elo - delta)
-                    pdata["elo"] = new_elo
+                    # Restore ELO to the exact pre-match value stored in match data
+                    # The 'elo' field in match data contains the ELO AFTER the match was applied
+                    # So we need to calculate the pre-match ELO by subtracting the elo_change
+                    stored_post_match_elo = int(player.get("elo", 0))
+                    elo_change_applied = int(player.get("elo_change", 0))
+                    
+                    # Calculate what the ELO was BEFORE this match
+                    pre_match_elo = stored_post_match_elo - elo_change_applied
+                    
+                    # Restore to pre-match ELO (don't apply minimum constraint during revert)
+                    pdata["elo"] = pre_match_elo
+                    new_elo = pre_match_elo
+                    
+                    print(f"Restoring {player_name}: stored_post={stored_post_match_elo}, change={elo_change_applied}, restored_to={pre_match_elo}")
 
                     try:
                         pdata["level"] = config.get_level_from_elo(new_elo)
