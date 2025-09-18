@@ -198,7 +198,8 @@ class StaffMatchControls(View):
                     player_data[player_key] = pdata
                     
                     # Log the reversion for debugging
-                    reverted_players.append(f"{player_name}: ELO {original_elo} -> {new_elo} (delta: -{delta})")
+                    elo_change_amount = original_elo - new_elo
+                    reverted_players.append(f"{player_name}: ELO {original_elo} -> {new_elo} (reverted: {elo_change_amount:+})")
                     print(f"Reverted {player_name}: ELO {original_elo} -> {new_elo}, W/L: {original_wins}/{original_losses} -> {pdata['wins']}/{pdata['losses']}")
             
             print(f"Total players reverted: {len(reverted_players)}")
@@ -851,7 +852,8 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
                     player_data[player_key] = pdata
                     
                     # Log the reversion for debugging
-                    reverted_players.append(f"{player_name}: ELO {original_elo} -> {new_elo} (delta: -{delta})")
+                    elo_change_amount = original_elo - new_elo
+                    reverted_players.append(f"{player_name}: ELO {original_elo} -> {new_elo} (reverted: {elo_change_amount:+})")
                     print(f"Reverted {player_name}: ELO {original_elo} -> {new_elo}, W/L: {original_wins}/{original_losses} -> {pdata['wins']}/{pdata['losses']}")
             
             print(f"Total players reverted: {len(reverted_players)}")
