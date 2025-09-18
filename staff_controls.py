@@ -205,14 +205,9 @@ class StaffMatchControls(View):
             
             print(f"Total players reverted: {len(reverted_players)}")
 
-            # Save updated player stats
+            # Save updated player stats FIRST
             with open("players.json", "w") as f:
                 json.dump(player_data, f, indent=2)
-
-            # Remove match from results.json
-            del results[self.match_id]
-            with open("results.json", "w") as f:
-                json.dump(results, f, indent=2)
 
             # Remove from active submissions and pending uploads so it can be submitted again
             import main
@@ -228,8 +223,13 @@ class StaffMatchControls(View):
                     del main.pending_upload[user_id]
                     break
 
-            # Remove embeds/images from both channels
+            # Remove embeds/images from both channels BEFORE deleting match data
             await remove_match_embeds(self.bot, self.match_id)
+
+            # Remove match from results.json LAST (after all other operations that need the data)
+            del results[self.match_id]
+            with open("results.json", "w") as f:
+                json.dump(results, f, indent=2)
 
             # Update leaderboard after reverting stats
             general_cog = self.bot.get_cog('General')
@@ -864,14 +864,9 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
             
             print(f"Total players reverted: {len(reverted_players)}")
 
-            # Save updated player stats
+            # Save updated player stats FIRST
             with open("players.json", "w") as f:
                 json.dump(player_data, f, indent=2)
-
-            # Remove match from results.json
-            del results[actual_match_id]
-            with open("results.json", "w") as f:
-                json.dump(results, f, indent=2)
 
             # Remove from active submissions and pending uploads so it can be submitted again
             import main
@@ -887,8 +882,13 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
                     del main.pending_upload[user_id]
                     break
 
-            # Remove embeds/images from both channels
+            # Remove embeds/images from both channels BEFORE deleting match data
             await remove_match_embeds(self.bot, actual_match_id)
+
+            # Remove match from results.json LAST (after all other operations that need the data)
+            del results[actual_match_id]
+            with open("results.json", "w") as f:
+                json.dump(results, f, indent=2)
 
             # Update leaderboard after reverting stats
             leaderboard_updated = False
