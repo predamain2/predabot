@@ -204,6 +204,10 @@ class StaffMatchControls(View):
             
             print(f"Total players reverted: {len(reverted_players)}")
 
+            # Update the global player_data in main.py as well
+            import main
+            main.player_data.update(player_data)
+            
             # Save updated player stats FIRST
             with open("players.json", "w") as f:
                 json.dump(player_data, f, indent=2)
@@ -233,7 +237,7 @@ class StaffMatchControls(View):
             # Update leaderboard after reverting stats
             general_cog = self.bot.get_cog('General')
             if general_cog:
-                await general_cog.update_leaderboard()
+                await general_cog.update_leaderboard_if_needed(interaction.guild)
 
             revert_summary = f"✅ Match {self.match_id} has been reverted:\n" \
                            f"• Removed from results database\n" \
@@ -858,6 +862,10 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
             
             print(f"Total players reverted: {len(reverted_players)}")
 
+            # Update the global player_data in main.py as well
+            import main
+            main.player_data.update(player_data)
+            
             # Save updated player stats FIRST
             with open("players.json", "w") as f:
                 json.dump(player_data, f, indent=2)
@@ -888,8 +896,8 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
             leaderboard_updated = False
             try:
                 general_cog = self.bot.get_cog('General')
-                if general_cog and hasattr(general_cog, 'update_leaderboard'):
-                    await general_cog.update_leaderboard()
+                if general_cog and hasattr(general_cog, 'update_leaderboard_if_needed'):
+                    await general_cog.update_leaderboard_if_needed(interaction.guild)
                     leaderboard_updated = True
             except Exception as e:
                 print(f"Warning: Could not update leaderboard: {e}")
