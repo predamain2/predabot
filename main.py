@@ -2570,6 +2570,8 @@ async def stats(interaction: discord.Interaction):
         total_kills = 0
         total_deaths = 0
         total_assists = 0
+        mvp_count = 0
+        total_play_minutes = 0.0  # sum exact minutes across matches (2.05 per round)
         per_map = {}
         recent_results = []
 
@@ -2584,6 +2586,7 @@ async def stats(interaction: discord.Interaction):
         for match in load_results().values():
             map_name = match.get('map', 'Unknown')
             outcome = None
+            participated_in_match = False
 
             for team_key in ['winning_team', 'losing_team']:
                 for p in match.get(team_key, []) or []:
@@ -2619,9 +2622,33 @@ async def stats(interaction: discord.Interaction):
                         else:
                             per_map[map_name]['losses'] += 1
                             outcome = 'L'
+                        participated_in_match = True
+                        # Increment MVP strictly when player entry has mvp: true
+                        try:
+                            is_mvp = p.get('mvp', False)
+                            if isinstance(is_mvp, str):
+                                is_mvp = is_mvp.strip().lower() in ('true', '1', 'yes')
+                            if bool(is_mvp):
+                                mvp_count += 1
+                        except Exception:
+                            pass
 
             if outcome is not None:
                 recent_results.append(outcome)
+            # Accumulate playtime for matches the player participated in
+            if participated_in_match:
+                score_str = str(match.get('score', '')).strip()
+                rounds_total = 0
+                if '-' in score_str:
+                    try:
+                        a_str, b_str = score_str.split('-', 1)
+                        a = int(re.sub(r'[^0-9]', '', a_str)) if re.search(r'\d', a_str) else 0
+                        b = int(re.sub(r'[^0-9]', '', b_str)) if re.search(r'\d', b_str) else 0
+                        rounds_total = a + b
+                    except Exception:
+                        rounds_total = 0
+                # 2.05 minutes per round, sum exact minutes across matches
+                total_play_minutes += rounds_total * 2.05
 
         # Derive extra numbers
         kd_ratio_num = (total_kills / total_deaths) if total_deaths > 0 else float(total_kills)
@@ -2631,8 +2658,9 @@ async def stats(interaction: discord.Interaction):
         avg_kills = (total_kills / total_games) if total_games > 0 else 0
 
         # Calculate advanced statistics with better scaling
-        rounds_played = total_games * 16  # Assuming average 16 rounds per match
-        kpr = (total_kills / rounds_played) if rounds_played > 0 else 0
+        # Use actual rounds played when available for better KPR; fallback to avg 16 per game
+        estimated_rounds_played = int(round(total_play_minutes / 2.05)) if total_play_minutes > 0 else (total_games * 16)
+        kpr = (total_kills / estimated_rounds_played) if estimated_rounds_played > 0 else 0
         
         # Impact rating calculation (simplified) - scale to 0-3 range
         impact = min(3.0, max(0.0, kd_ratio_num * 0.8 + (avg_kills / 25) * 0.2)) if avg_kills > 0 else 0
@@ -2697,16 +2725,21 @@ async def stats(interaction: discord.Interaction):
         else:
             level_progress = 75  # Default progress if at max level
         
-        # Calculate playtime (rough estimate: 15 min per game)
-        playtime_minutes = total_games * 15
-        playtime_hours = playtime_minutes // 60
-        playtime = f"{playtime_hours}h" if playtime_hours > 0 else f"{playtime_minutes}m"
+        # Calculate playtime based on rounds: sum_exact(rounds * 2.05) minutes, round up to whole minute
+        import math
+        total_minutes = int(math.ceil(total_play_minutes))
+        play_hours = total_minutes // 60
+        play_minutes_rem = total_minutes % 60
+        if play_hours > 0:
+            playtime = f"{play_hours}h {play_minutes_rem}m" if play_minutes_rem > 0 else f"{play_hours}h"
+        else:
+            playtime = f"{play_minutes_rem}m"
         
         # Use only "Leaderboard" as league name
         league = "Leaderboard"
         
-        # Calculate MVP count (simplified: ~10% of wins)
-        mvp = wins // 10 if wins > 0 else 0
+        # MVP count from results.json strictly by discord_id and mvp:true
+        mvp = mvp_count
         
         # Generate leaderboard context
         all_players = []
@@ -2791,6 +2824,7 @@ async def stats(interaction: discord.Interaction):
             'avatar_url': str(interaction.user.display_avatar.url),
             'level': level,
             'level_progress': level_progress,
+            'elo': elo,
             'playtime': playtime,
             'join_date': '11.07.2025',  # Default date, could be enhanced with actual registration date
             'games': total_games,
