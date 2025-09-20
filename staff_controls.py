@@ -123,6 +123,11 @@ class StaffMatchControls(View):
     @discord.ui.button(label="Revert Scoreboard", style=discord.ButtonStyle.danger)
     async def revert_scoreboard(self, interaction: discord.Interaction, button: Button):
         try:
+            # Claim the interaction right away to avoid Unknown interaction (404) on long ops
+            try:
+                await interaction.response.defer(ephemeral=True)
+            except Exception:
+                pass
             # Load necessary data
             with open("results.json", "r") as f:
                 results = json.load(f)
@@ -131,7 +136,7 @@ class StaffMatchControls(View):
                 
             match_data = results.get(self.match_id)
             if not match_data:
-                await interaction.response.send_message("Match not found in database.", ephemeral=True)
+                await interaction.followup.send("Match not found in database.", ephemeral=True)
                 return
 
             # Revert player stats and ELO (prefer discord_id, fallback to name; infer delta if needed)
@@ -164,7 +169,7 @@ class StaffMatchControls(View):
                         print(f"⚠️ Could not find player data for: {player_name} (discord_id: {discord_id})")
                         continue
 
-                    # Store original values for logging
+                    # Store current values for logging
                     original_elo = int(pdata.get("elo", getattr(config, "DEFAULT_ELO", 100)))
                     original_wins = int(pdata.get("wins", 0))
                     original_losses = int(pdata.get("losses", 0))
@@ -175,20 +180,15 @@ class StaffMatchControls(View):
                     else:
                         pdata["losses"] = max(0, original_losses - 1)
 
-                    # Restore ELO to the exact pre-match value stored in match data
-                    # The 'elo' field in match data contains the ELO AFTER the match was applied
-                    # So we need to calculate the pre-match ELO by subtracting the elo_change
-                    stored_post_match_elo = int(player.get("elo", 0))
+                    # Revert ONLY this match's ELO delta from the player's CURRENT ELO
                     elo_change_applied = int(player.get("elo_change", 0))
-                    
-                    # Calculate what the ELO was BEFORE this match
-                    pre_match_elo = stored_post_match_elo - elo_change_applied
-                    
-                    # Restore to pre-match ELO (don't apply minimum constraint during revert)
-                    pdata["elo"] = pre_match_elo
-                    new_elo = pre_match_elo
-                    
-                    print(f"Restoring {player_name}: stored_post={stored_post_match_elo}, change={elo_change_applied}, restored_to={pre_match_elo}")
+                    current_elo = original_elo
+                    # Remove the match effect regardless of when it happened
+                    # If elo_change was +12 (win), subtract 12; if -20 (loss), add 20
+                    reverted_elo = max(getattr(config, "DEFAULT_ELO", 100), current_elo - elo_change_applied)
+                    pdata["elo"] = reverted_elo
+                    new_elo = reverted_elo
+                    print(f"Reverting {player_name}: current={current_elo}, delta={-elo_change_applied:+}, new={reverted_elo}")
 
                     try:
                         pdata["level"] = config.get_level_from_elo(new_elo)
@@ -198,8 +198,8 @@ class StaffMatchControls(View):
                     player_data[player_key] = pdata
                     
                     # Log the reversion for debugging
-                    elo_change_amount = original_elo - new_elo
-                    reverted_players.append(f"{player_name}: ELO {original_elo} -> {new_elo} (reverted: {elo_change_amount:+})")
+                    applied_delta = new_elo - original_elo
+                    reverted_players.append(f"{player_name}: ELO {original_elo} -> {new_elo} (reverted: {applied_delta:+})")
                     print(f"Reverted {player_name}: ELO {original_elo} -> {new_elo}, W/L: {original_wins}/{original_losses} -> {pdata['wins']}/{pdata['losses']}")
             
             print(f"Total players reverted: {len(reverted_players)}")
@@ -251,9 +251,12 @@ class StaffMatchControls(View):
                 if len(reverted_players) > 10:
                     revert_summary += f"\n... and {len(reverted_players) - 10} more"
             
-            await interaction.response.send_message(revert_summary, ephemeral=True)
+            await interaction.followup.send(revert_summary, ephemeral=True)
         except Exception as e:
-            await interaction.response.send_message(f"Error reverting scoreboard: {str(e)}", ephemeral=True)
+            try:
+                await interaction.followup.send(f"Error reverting scoreboard: {str(e)}", ephemeral=True)
+            except Exception:
+                pass
     def __init__(self, match_id, match_data, bot):
         super().__init__(timeout=None)  # No timeout for staff controls
         self.match_id = match_id
@@ -735,6 +738,11 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
     async def revert_scoreboard(self, interaction: discord.Interaction, match_id: str):
         """Revert a match scoreboard"""
         try:
+            # Defer immediately to avoid Unknown interaction errors on long operations
+            try:
+                await interaction.response.defer(ephemeral=True)
+            except Exception:
+                pass
             # Load necessary data
             with open("results.json", "r") as f:
                 results = json.load(f)
@@ -786,13 +794,13 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
                     value=f"```{available_list}```" if available_list else "No matches found",
                     inline=False
                 )
-                await interaction.response.send_message(embed=embed, ephemeral=True)
+                await interaction.followup.send(embed=embed, ephemeral=True)
                 return
 
             # Use the actual match ID that was found
             match_data = results[actual_match_id]
 
-            # Revert player stats and ELO
+            # Revert player stats and ONLY the ELO delta from this match
             reverted_players = []
             for team in ["winning_team", "losing_team"]:
                 for player in match_data[team]:
@@ -822,7 +830,7 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
                         print(f"⚠️ Could not find player data for: {player_name} (discord_id: {discord_id})")
                         continue
 
-                    # Store original values for logging
+                    # Store current values for logging
                     original_elo = int(pdata.get("elo", getattr(config, "DEFAULT_ELO", 100)))
                     original_wins = int(pdata.get("wins", 0))
                     original_losses = int(pdata.get("losses", 0))
@@ -833,20 +841,13 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
                     else:
                         pdata["losses"] = max(0, original_losses - 1)
 
-                    # Restore ELO to the exact pre-match value stored in match data
-                    # The 'elo' field in match data contains the ELO AFTER the match was applied
-                    # So we need to calculate the pre-match ELO by subtracting the elo_change
-                    stored_post_match_elo = int(player.get("elo", 0))
+                    # Revert ONLY this match's ELO delta from the player's CURRENT ELO
                     elo_change_applied = int(player.get("elo_change", 0))
-                    
-                    # Calculate what the ELO was BEFORE this match
-                    pre_match_elo = stored_post_match_elo - elo_change_applied
-                    
-                    # Restore to pre-match ELO (don't apply minimum constraint during revert)
-                    pdata["elo"] = pre_match_elo
-                    new_elo = pre_match_elo
-                    
-                    print(f"Restoring {player_name}: stored_post={stored_post_match_elo}, change={elo_change_applied}, restored_to={pre_match_elo}")
+                    current_elo = original_elo
+                    reverted_elo = max(getattr(config, "DEFAULT_ELO", 100), current_elo - elo_change_applied)
+                    pdata["elo"] = reverted_elo
+                    new_elo = reverted_elo
+                    print(f"Reverting {player_name}: current={current_elo}, delta={-elo_change_applied:+}, new={reverted_elo}")
 
                     try:
                         pdata["level"] = config.get_level_from_elo(new_elo)
@@ -856,8 +857,8 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
                     player_data[player_key] = pdata
                     
                     # Log the reversion for debugging
-                    elo_change_amount = original_elo - new_elo
-                    reverted_players.append(f"{player_name}: ELO {original_elo} -> {new_elo} (reverted: {elo_change_amount:+})")
+                    applied_delta = new_elo - original_elo
+                    reverted_players.append(f"{player_name}: ELO {original_elo} -> {new_elo} (reverted: {applied_delta:+})")
                     print(f"Reverted {player_name}: ELO {original_elo} -> {new_elo}, W/L: {original_wins}/{original_losses} -> {pdata['wins']}/{pdata['losses']}")
             
             print(f"Total players reverted: {len(reverted_players)}")
@@ -922,12 +923,15 @@ class SubmissionManagementCog(discord.ext.commands.Cog):
                 if len(reverted_players) > 10:
                     success_parts.append(f"... and {len(reverted_players) - 10} more")
 
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "\n".join(success_parts), 
                 ephemeral=True
             )
         except Exception as e:
-            await interaction.response.send_message(f"❌ Error reverting scoreboard: {str(e)}", ephemeral=True)
+            try:
+                await interaction.followup.send(f"❌ Error reverting scoreboard: {str(e)}", ephemeral=True)
+            except Exception:
+                pass
 
     @discord.app_commands.command(name="edit_player_stats", description="Edit a player's stats in a specific match")
     @staff_only_check()
