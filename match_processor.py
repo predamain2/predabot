@@ -299,6 +299,36 @@ def _calculate_name_similarity(scoreboard_name: str, expected_name: str) -> floa
     else:
         word_score = 0.0
     
+    # Strategy 5.5: Check for word containment (like "goatedBAKKI" contains "bakki")
+    # This is more important than character similarity for names
+    word_containment_score = 0.0
+    if scoreboard_words and expected_words:
+        # Check if any word from one name is contained in the other
+        for sw in scoreboard_words:
+            for ew in expected_words:
+                if sw in ew or ew in sw:
+                    # Calculate score based on how much of the word matches
+                    shorter = min(len(sw), len(ew))
+                    longer = max(len(sw), len(ew))
+                    if shorter > 0:
+                        containment_ratio = shorter / longer
+                        word_containment_score = max(word_containment_score, containment_ratio * 0.9)
+    
+    # Strategy 5.6: Special word matching for compound names (like "goatedBAKKI")
+    # Split compound words and check each part
+    compound_score = 0.0
+    if scoreboard_words and expected_words:
+        # For each word in scoreboard, check if it contains any expected word
+        for sw in scoreboard_words:
+            for ew in expected_words:
+                # Check if the scoreboard word contains the expected word
+                if ew.lower() in sw.lower():
+                    # Give high score for word containment
+                    compound_score = max(compound_score, 0.95)
+                # Also check reverse
+                if sw.lower() in ew.lower():
+                    compound_score = max(compound_score, 0.95)
+    
     # Strategy 6: Special handling for emoji names (like "Bakki 🇦🇱")
     # If one name has emojis and the other doesn't, but the text part matches, give high score
     original_scoreboard = scoreboard_name.lower().strip()
@@ -353,12 +383,14 @@ def _calculate_name_similarity(scoreboard_name: str, expected_name: str) -> floa
         print(f"DEBUG - Name matching for '{scoreboard_name}' -> '{expected_name}':")
         print(f"  fuzzy_score: {fuzzy_score:.2f}")
         print(f"  word_score: {word_score:.2f}")
+        print(f"  word_containment_score: {word_containment_score:.2f}")
+        print(f"  compound_score: {compound_score:.2f}")
         print(f"  emoji_score: {emoji_score:.2f}")
         print(f"  prefix_suffix_score: {prefix_suffix_score:.2f}")
-        print(f"  final_score: {max(fuzzy_score, word_score, emoji_score, prefix_suffix_score):.2f}")
+        print(f"  final_score: {max(fuzzy_score, word_score, word_containment_score, compound_score, emoji_score, prefix_suffix_score):.2f}")
     
     # Return the best score found
-    return max(fuzzy_score, word_score, emoji_score, prefix_suffix_score)
+    return max(fuzzy_score, word_score, word_containment_score, compound_score, emoji_score, prefix_suffix_score)
 
 def _find_best_player_matches(
     scoreboard_players: list[dict], expected_names: list[str]
