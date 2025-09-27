@@ -305,7 +305,6 @@ def _calculate_name_similarity(scoreboard_name: str, expected_name: str) -> floa
     original_expected = expected_name.lower().strip()
     
     # Remove emojis from both names for comparison
-    import re
     clean_scoreboard = re.sub(r'[^\w\s]', '', original_scoreboard)
     clean_expected = re.sub(r'[^\w\s]', '', original_expected)
     
