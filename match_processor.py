@@ -318,8 +318,31 @@ def _calculate_name_similarity(scoreboard_name: str, expected_name: str) -> floa
             if shorter > 0:
                 emoji_score = (shorter / longer) * 0.9  # High score for emoji substring matches
     
+    # Strategy 7: Handle prefix/suffix variations (like "[9RM] goatedBAKKI" vs "Bakki 🇦🇱")
+    # Remove common prefixes and suffixes, then compare
+    prefix_removed_scoreboard = re.sub(r'^\[.*?\]\s*', '', original_scoreboard)
+    prefix_removed_expected = re.sub(r'^\[.*?\]\s*', '', original_expected)
+    
+    # Remove common suffixes
+    suffix_removed_scoreboard = re.sub(r'\s*\[.*?\]$', '', prefix_removed_scoreboard)
+    suffix_removed_expected = re.sub(r'\s*\[.*?\]$', '', prefix_removed_expected)
+    
+    # Clean up and compare
+    clean_scoreboard_v2 = re.sub(r'[^\w\s]', '', suffix_removed_scoreboard)
+    clean_expected_v2 = re.sub(r'[^\w\s]', '', suffix_removed_expected)
+    
+    prefix_suffix_score = 0.0
+    if clean_scoreboard_v2 and clean_expected_v2:
+        if clean_scoreboard_v2 == clean_expected_v2:
+            prefix_suffix_score = 0.98  # Very high score for prefix/suffix variations
+        elif clean_scoreboard_v2 in clean_expected_v2 or clean_expected_v2 in clean_scoreboard_v2:
+            shorter = min(len(clean_scoreboard_v2), len(clean_expected_v2))
+            longer = max(len(clean_scoreboard_v2), len(clean_expected_v2))
+            if shorter > 0:
+                prefix_suffix_score = (shorter / longer) * 0.95  # Very high score for prefix/suffix substring matches
+    
     # Return the best score found
-    return max(fuzzy_score, word_score, emoji_score)
+    return max(fuzzy_score, word_score, emoji_score, prefix_suffix_score)
 
 def _find_best_player_matches(
     scoreboard_players: list[dict], expected_names: list[str]
