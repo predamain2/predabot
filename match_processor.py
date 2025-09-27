@@ -397,84 +397,91 @@ def get_teams_from_match_data(
         match_data[team_key] = updated_team
     # --- End of new matching logic ---
 
-    # Determine which original team corresponds to which scoreboard team
-    ct_team_players = {p["name"].lower(): p for p in match_data["ct_team"]}
-    t_team_players = {p["name"].lower(): p for p in match_data["t_team"]}
-    
-    # Count how many players from each original team are found in each scoreboard team
-    ct_matches_team1 = len(set(ct_team_players.keys()) & set(n.lower() for n in team1_players))
-    ct_matches_team2 = len(set(ct_team_players.keys()) & set(n.lower() for n in team2_players))
-    t_matches_team1 = len(set(t_team_players.keys()) & set(n.lower() for n in team1_players))
-    t_matches_team2 = len(set(t_team_players.keys()) & set(n.lower() for n in team2_players))
-    
-    # Determine which original team corresponds to which scoreboard team
-    # CT team corresponds to the original team with more matches in CT
-    ct_is_team1 = ct_matches_team1 > ct_matches_team2
-    # T team corresponds to the original team with more matches in T
-    t_is_team1 = t_matches_team1 > t_matches_team2
-    
     # Get the scores
     ct_score, t_score = map(int, match_data["score"].split("-"))
     
-    # Determine which original team won based on which scoreboard team had the higher score
-    if ct_score > t_score:
-        # CT won, so the team that corresponds to CT is the winner
-        winning_original_team = team1_players if ct_is_team1 else team2_players
-        losing_original_team = team2_players if ct_is_team1 else team1_players
-        winning_scoreboard_team = "ct_team"
-        losing_scoreboard_team = "t_team"
+    # Create new team structures based on the final score
+    # We need to determine which original team got which score
+    all_scoreboard_players = match_data["ct_team"] + match_data["t_team"]
+    
+    # Create winning and losing teams based on the final score
+    winning_team = []
+    losing_team = []
+    
+    # For each original team, determine if they won or lost based on their players' performance
+    team1_score = 0
+    team2_score = 0
+    
+    # Count how many players from each original team are in each scoreboard team
+    ct_team1_count = len(set(p["name"].lower() for p in match_data["ct_team"]) & set(team1_players.keys()))
+    ct_team2_count = len(set(p["name"].lower() for p in match_data["ct_team"]) & set(team2_players.keys()))
+    t_team1_count = len(set(p["name"].lower() for p in match_data["t_team"]) & set(team1_players.keys()))
+    t_team2_count = len(set(p["name"].lower() for p in match_data["t_team"]) & set(team2_players.keys()))
+    
+    # Determine which original team corresponds to which scoreboard team
+    ct_is_team1 = ct_team1_count > ct_team2_count
+    t_is_team1 = t_team1_count > t_team2_count
+    
+    # Assign scores to original teams
+    if ct_is_team1:
+        team1_score = ct_score
+        team2_score = t_score
     else:
-        # T won, so the team that corresponds to T is the winner
-        winning_original_team = team1_players if t_is_team1 else team2_players
-        losing_original_team = team2_players if t_is_team1 else team1_players
-        winning_scoreboard_team = "t_team"
-        losing_scoreboard_team = "ct_team"
-
-    # Add absent players to the winning team
+        team1_score = t_score
+        team2_score = ct_score
+    
+    # Determine which original team won
+    if team1_score > team2_score:
+        # Team1 won
+        winning_original_team = team1_players
+        losing_original_team = team2_players
+        winning_scoreboard_team = "ct_team" if ct_is_team1 else "t_team"
+        losing_scoreboard_team = "t_team" if ct_is_team1 else "ct_team"
+    else:
+        # Team2 won
+        winning_original_team = team2_players
+        losing_original_team = team1_players
+        winning_scoreboard_team = "ct_team" if not ct_is_team1 else "t_team"
+        losing_scoreboard_team = "t_team" if not ct_is_team1 else "ct_team"
+    
+    # Build the winning team from scoreboard players
+    for player in match_data[winning_scoreboard_team]:
+        winning_team.append(player)
+    
+    # Add missing players from winning original team as absent
     for stored_nick, player_info in winning_original_team.items():
-        if stored_nick not in (p["name"] for p in match_data[winning_scoreboard_team]):
-            match_data[winning_scoreboard_team].append(
-                {
-                    "name": stored_nick,
-                    "kills": 0,
-                    "assists": 0,
-                    "deaths": 13,
-                    "kd": 0.0,
-                    "was_absent": True,
-                    "elo_change": -20,
-                }
-            )
-            player_data[player_info["id"]]["losses"] = player_data[player_info["id"]].get(
-                "losses", 0
-            ) + 1
-            player_data[player_info["id"]]["elo"] = max(
-                config.DEFAULT_ELO, player_data[player_info["id"]].get("elo", config.DEFAULT_ELO) - 20
-            )
-
-    # Add absent players to the losing team
+        if stored_nick not in (p["name"] for p in winning_team):
+            winning_team.append({
+                "name": stored_nick,
+                "kills": 0,
+                "assists": 0,
+                "deaths": 13,
+                "kd": 0.0,
+                "was_absent": True,
+                "elo_change": -20,
+            })
+            player_data[player_info["id"]]["losses"] = player_data[player_info["id"]].get("losses", 0) + 1
+            player_data[player_info["id"]]["elo"] = max(config.DEFAULT_ELO, player_data[player_info["id"]].get("elo", config.DEFAULT_ELO) - 20)
+    
+    # Build the losing team from scoreboard players
+    for player in match_data[losing_scoreboard_team]:
+        losing_team.append(player)
+    
+    # Add missing players from losing original team as absent
     for stored_nick, player_info in losing_original_team.items():
-        if stored_nick not in (p["name"] for p in match_data[losing_scoreboard_team]):
-            match_data[losing_scoreboard_team].append(
-                {
-                    "name": stored_nick,
-                    "kills": 0,
-                    "assists": 0,
-                    "deaths": 13,
-                    "kd": 0.0,
-                    "was_absent": True,
-                    "elo_change": -20,
-                }
-            )
-            player_data[player_info["id"]]["losses"] = player_data[player_info["id"]].get(
-                "losses", 0
-            ) + 1
-            player_data[player_info["id"]]["elo"] = max(
-                config.DEFAULT_ELO, player_data[player_info["id"]].get("elo", config.DEFAULT_ELO) - 20
-            )
-
-    # Set the winning and losing teams
-    winning_team = match_data[winning_scoreboard_team]
-    losing_team = match_data[losing_scoreboard_team]
+        if stored_nick not in (p["name"] for p in losing_team):
+            losing_team.append({
+                "name": stored_nick,
+                "kills": 0,
+                "assists": 0,
+                "deaths": 13,
+                "kd": 0.0,
+                "was_absent": True,
+                "elo_change": -20,
+            })
+            player_data[player_info["id"]]["losses"] = player_data[player_info["id"]].get("losses", 0) + 1
+            player_data[player_info["id"]]["elo"] = max(config.DEFAULT_ELO, player_data[player_info["id"]].get("elo", config.DEFAULT_ELO) - 20)
+    
     winners_were_ct = winning_scoreboard_team == "ct_team"
 
     # Final validation: Check for duplicate players between teams

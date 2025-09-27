@@ -1521,7 +1521,13 @@ async def on_message(message: discord.Message):
             # T won, so the team that corresponds to T is the winner
             winning_team_discord_ids = original_match['team1'] if t_matches_team1 > t_matches_team2 else original_match['team2']
         
-        if user_discord_id not in winning_team_discord_ids:
+        # Check if user is owner (owners can submit any match)
+        is_owner = False
+        owner_role_id = getattr(config, 'OWNER_ROLE_ID', 0)
+        if owner_role_id and hasattr(message.author, 'roles'):
+            is_owner = any(getattr(role, 'id', 0) == owner_role_id for role in message.author.roles)
+        
+        if not is_owner and user_discord_id not in winning_team_discord_ids:
             # Clean up and reject submission
             active_submissions.discard(match_id)
             del pending_upload[message.author.id]
