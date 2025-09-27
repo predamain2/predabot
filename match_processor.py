@@ -418,9 +418,19 @@ def get_teams_from_match_data(
     t_team1_count = len(set(p["name"].lower() for p in match_data["t_team"]) & set(team1_players.keys()))
     t_team2_count = len(set(p["name"].lower() for p in match_data["t_team"]) & set(team2_players.keys()))
     
+    print(f"DEBUG - Team assignment counts:")
+    print(f"  CT team1: {ct_team1_count}, CT team2: {ct_team2_count}")
+    print(f"  T team1: {t_team1_count}, T team2: {t_team2_count}")
+    print(f"  Team1 players: {list(team1_players.keys())}")
+    print(f"  Team2 players: {list(team2_players.keys())}")
+    print(f"  CT players: {[p['name'].lower() for p in match_data['ct_team']]}")
+    print(f"  T players: {[p['name'].lower() for p in match_data['t_team']]}")
+    
     # Determine which original team corresponds to which scoreboard team
     ct_is_team1 = ct_team1_count > ct_team2_count
     t_is_team1 = t_team1_count > t_team2_count
+    
+    print(f"  CT is team1: {ct_is_team1}, T is team1: {t_is_team1}")
     
     # Assign scores to original teams
     if ct_is_team1:
