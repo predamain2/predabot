@@ -1310,16 +1310,22 @@ class SubmitResultsModal(discord.ui.Modal, title="Submit Scoreboard"):
                 await interaction.response.send_message("⚠️ Someone is already submitting this Match ID. Try again in a moment.", ephemeral=True)
                 return
 
-            # Check if user is authorized to submit this match (must be in either team)
+            # Check if user is authorized to submit this match (must be in either team OR be owner)
             match_data = matches_dict[mid]
             user_discord_id = interaction.user.id
             is_authorized = False
+            
+            # Check if user is owner (owners can submit any match)
+            is_owner = False
+            owner_role_id = getattr(config, 'OWNER_ROLE_ID', 0)
+            if owner_role_id and hasattr(interaction.user, 'roles'):
+                is_owner = any(getattr(role, 'id', 0) == owner_role_id for role in interaction.user.roles)
             
             # Check if user is in team1 or team2
             if user_discord_id in match_data.get('team1', []) or user_discord_id in match_data.get('team2', []):
                 is_authorized = True
             
-            if not is_authorized:
+            if not is_authorized and not is_owner:
                 await interaction.response.send_message("❌ You are not authorized to submit this match. Only players who participated in this match can submit the scoreboard.", ephemeral=True)
                 return
 
