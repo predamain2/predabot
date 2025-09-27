@@ -295,7 +295,6 @@ def _calculate_name_similarity(scoreboard_name: str, expected_name: str) -> floa
     # Special case: if we have compound names like "goatedBAKKI", try splitting on capital letters
     if len(scoreboard_words) == 1 and len(expected_words) == 1:
         # Try to split compound words like "goatedBAKKI" into ["goated", "bakki"]
-        import re
         scoreboard_compound = re.findall(r'[A-Z][a-z]*|[a-z]+', norm_scoreboard)
         expected_compound = re.findall(r'[A-Z][a-z]*|[a-z]+', norm_expected)
         if scoreboard_compound and expected_compound:
