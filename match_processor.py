@@ -314,6 +314,20 @@ def _calculate_name_similarity(scoreboard_name: str, expected_name: str) -> floa
                         containment_ratio = shorter / longer
                         word_containment_score = max(word_containment_score, containment_ratio * 0.9)
     
+    # Strategy 5.5.1: Check for substring containment within words (like "bakki" in "goatedbakki")
+    # This handles cases where the scoreboard name is one compound word
+    substring_containment_score = 0.0
+    if scoreboard_words and expected_words:
+        for sw in scoreboard_words:
+            for ew in expected_words:
+                # Check if the expected word is contained in the scoreboard word
+                if ew in sw:
+                    # Give high score for substring containment
+                    substring_containment_score = max(substring_containment_score, 0.95)
+                # Also check reverse
+                if sw in ew:
+                    substring_containment_score = max(substring_containment_score, 0.95)
+    
     # Strategy 5.6: Special word matching for compound names (like "goatedBAKKI")
     # Split compound words and check each part
     compound_score = 0.0
@@ -384,13 +398,14 @@ def _calculate_name_similarity(scoreboard_name: str, expected_name: str) -> floa
         print(f"  fuzzy_score: {fuzzy_score:.2f}")
         print(f"  word_score: {word_score:.2f}")
         print(f"  word_containment_score: {word_containment_score:.2f}")
+        print(f"  substring_containment_score: {substring_containment_score:.2f}")
         print(f"  compound_score: {compound_score:.2f}")
         print(f"  emoji_score: {emoji_score:.2f}")
         print(f"  prefix_suffix_score: {prefix_suffix_score:.2f}")
-        print(f"  final_score: {max(fuzzy_score, word_score, word_containment_score, compound_score, emoji_score, prefix_suffix_score):.2f}")
+        print(f"  final_score: {max(fuzzy_score, word_score, word_containment_score, substring_containment_score, compound_score, emoji_score, prefix_suffix_score):.2f}")
     
     # Return the best score found
-    return max(fuzzy_score, word_score, word_containment_score, compound_score, emoji_score, prefix_suffix_score)
+    return max(fuzzy_score, word_score, word_containment_score, substring_containment_score, compound_score, emoji_score, prefix_suffix_score)
 
 def _find_best_player_matches(
     scoreboard_players: list[dict], expected_names: list[str]

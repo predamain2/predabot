@@ -1827,9 +1827,18 @@ async def on_message(message: discord.Message):
             continue
             
         try:
+            # Update match_data with processed teams (including absent players) for HTML generation
+            match_data_for_html = match_data.copy()
+            if ct_won:
+                match_data_for_html['ct_team'] = winning_team
+                match_data_for_html['t_team'] = losing_team
+            else:
+                match_data_for_html['ct_team'] = losing_team
+                match_data_for_html['t_team'] = winning_team
+            
             # Generate scoreboard image
             output_file = f"scoreboard_{match_id}.png"
-            await render_html_to_image(match_data, output_file)
+            await render_html_to_image(match_data_for_html, output_file)
             
             # Create the MVP string with kills
             mvp_string = f"{mvp_player} ({max_kills} kills) 🏆" if mvp_player else "None"
