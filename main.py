@@ -1310,6 +1310,19 @@ class SubmitResultsModal(discord.ui.Modal, title="Submit Scoreboard"):
                 await interaction.response.send_message("⚠️ Someone is already submitting this Match ID. Try again in a moment.", ephemeral=True)
                 return
 
+            # Check if user is authorized to submit this match (must be in either team)
+            match_data = matches_dict[mid]
+            user_discord_id = interaction.user.id
+            is_authorized = False
+            
+            # Check if user is in team1 or team2
+            if user_discord_id in match_data.get('team1', []) or user_discord_id in match_data.get('team2', []):
+                is_authorized = True
+            
+            if not is_authorized:
+                await interaction.response.send_message("❌ You are not authorized to submit this match. Only players who participated in this match can submit the scoreboard.", ephemeral=True)
+                return
+
             # lock it
             active_submissions.add(mid)
             pending_upload[interaction.user.id] = {
@@ -1405,12 +1418,7 @@ async def on_message(message: discord.Message):
     if not message.attachments:
         return
 
-    attachment = message.attachments[0]
-    if not attachment.content_type or not attachment.content_type.startswith("image"):
-        await message.channel.send(f"❌ {message.author.mention} Please upload an **image** of the scoreboard.")
-        return
-        
-    # Send loading message
+    # Send loading message first
     loading_msg = await message.channel.send(
         embed=discord.Embed(
             title="⚙️ Processing Scoreboard",
@@ -1425,6 +1433,11 @@ async def on_message(message: discord.Message):
             color=discord.Color.red()
         )
     )
+
+    attachment = message.attachments[0]
+    if not attachment.content_type or not attachment.content_type.startswith("image"):
+        await loading_msg.edit(embed=discord.Embed(title="Error", description=f"❌ {message.author.mention} Please upload an **image** of the scoreboard.", color=discord.Color.red()))
+        return
 
     match_id = pend["match_id"]
     if match_id in results_data:
@@ -1471,6 +1484,22 @@ async def on_message(message: discord.Message):
         # Determine which team won and get their captain
         score_ct, score_t = map(int, match_data['score'].split('-'))
         ct_won = score_ct > score_t
+        
+        # Check if submitter is on the winning team
+        user_discord_id = message.author.id
+        winning_team_discord_ids = original_match['team1'] if ct_won else original_match['team2']
+        
+        if user_discord_id not in winning_team_discord_ids:
+            # Clean up and reject submission
+            active_submissions.discard(match_id)
+            del pending_upload[message.author.id]
+            print(f"Cleaned up after winning team validation failure: active_submissions={active_submissions}, pending_upload={pending_upload}")
+            await loading_msg.edit(embed=discord.Embed(
+                title="Error",
+                description="❌ Only players from the winning team can submit match results. You are not authorized to submit this match.",
+                color=discord.Color.red()
+            ))
+            return
         
         # Get the list of players on the winning team
         winning_team_players = [p['name'].lower() for p in (match_data['ct_team'] if ct_won else match_data['t_team'])]
@@ -1845,7 +1874,7 @@ async def on_message(message: discord.Message):
         except Exception as e:
             error_msg = f"⚠️ Failed to send match results to {dest.mention}: {str(e)}"
             print(error_msg)  # Log the error
-            await message.channel.send(error_msg)
+            await loading_msg.edit(embed=discord.Embed(title="Error", description=error_msg, color=discord.Color.red()))
 
 # =========================================================
 #                       EVENTS

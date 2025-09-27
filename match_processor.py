@@ -187,7 +187,7 @@ def _build_expected_rosters(original_match: dict, player_data: dict) -> tuple[di
 def _normalize_name_for_matching(name: str) -> str:
     """
     Normalize a name for better OCR error handling.
-    Handles common OCR mistakes and variations.
+    Handles common OCR mistakes, prefixes, suffixes, and emojis.
     """
     if not name:
         return ""
@@ -209,25 +209,41 @@ def _normalize_name_for_matching(name: str) -> str:
     for wrong, correct in ocr_fixes.items():
         normalized = normalized.replace(wrong, correct)
     
-    # Remove common OCR artifacts and extra characters
     # Remove extra repeated characters (like "distincttttttt" -> "distinct")
     import re
     normalized = re.sub(r'(.)\1{2,}', r'\1', normalized)  # Remove 3+ repeated chars
     
-    # Remove common prefixes/suffixes that might be OCR artifacts
-    prefixes_to_remove = ['|', '||', '|||', '~', '`', "'", '"']
-    suffixes_to_remove = ['|', '||', '|||', '~', '`', "'", '"', 'fps', 'fps', 'hz', 'ms']
+    # Remove common prefixes (team tags, brackets, etc.)
+    prefix_patterns = [
+        r'^\[.*?\]\s*',  # [RHD], [Team], etc.
+        r'^\(.*?\)\s*',  # (Team), etc.
+        r'^<.*?>\s*',    # <Team>, etc.
+        r'^\{.*?\}\s*',  # {Team}, etc.
+        r'^[|~`\'"]+\s*',  # |, ||, ~, `, ', "
+        r'^[a-z]+\s*:\s*',  # team:, clan:, etc.
+    ]
     
-    for prefix in prefixes_to_remove:
-        if normalized.startswith(prefix):
-            normalized = normalized[len(prefix):]
+    for pattern in prefix_patterns:
+        normalized = re.sub(pattern, '', normalized)
     
-    for suffix in suffixes_to_remove:
-        if normalized.endswith(suffix):
-            normalized = normalized[:-len(suffix)]
+    # Remove common suffixes (FPS, Hz, etc.)
+    suffix_patterns = [
+        r'\s*\[.*?\]$',  # [120fps], [Team], etc.
+        r'\s*\(.*?\)$',  # (120fps), etc.
+        r'\s*<.*?>$',    # <120fps>, etc.
+        r'\s*\{.*?\}$',  # {120fps}, etc.
+        r'\s*[|~`\'"]+$',  # |, ||, ~, `, ', "
+        r'\s*\d+fps$',   # 120fps, 60fps, etc.
+        r'\s*\d+hz$',    # 120hz, 60hz, etc.
+        r'\s*\d+ms$',    # 5ms, 10ms, etc.
+        r'\s*[a-z]+:\s*$',  # fps:, hz:, etc.
+    ]
     
-    # Clean up any remaining extra characters
-    normalized = re.sub(r'[^a-z0-9\s]', '', normalized)
+    for pattern in suffix_patterns:
+        normalized = re.sub(pattern, '', normalized)
+    
+    # Remove emojis and special characters but keep basic alphanumeric and spaces
+    normalized = re.sub(r'[^\w\s]', '', normalized)
     normalized = re.sub(r'\s+', ' ', normalized).strip()
     
     return normalized
@@ -283,8 +299,28 @@ def _calculate_name_similarity(scoreboard_name: str, expected_name: str) -> floa
     else:
         word_score = 0.0
     
+    # Strategy 6: Special handling for emoji names (like "Bakki 🇦🇱")
+    # If one name has emojis and the other doesn't, but the text part matches, give high score
+    original_scoreboard = scoreboard_name.lower().strip()
+    original_expected = expected_name.lower().strip()
+    
+    # Remove emojis from both names for comparison
+    import re
+    clean_scoreboard = re.sub(r'[^\w\s]', '', original_scoreboard)
+    clean_expected = re.sub(r'[^\w\s]', '', original_expected)
+    
+    emoji_score = 0.0
+    if clean_scoreboard and clean_expected:
+        if clean_scoreboard == clean_expected:
+            emoji_score = 0.95  # Very high score for emoji variations
+        elif clean_scoreboard in clean_expected or clean_expected in clean_scoreboard:
+            shorter = min(len(clean_scoreboard), len(clean_expected))
+            longer = max(len(clean_scoreboard), len(clean_expected))
+            if shorter > 0:
+                emoji_score = (shorter / longer) * 0.9  # High score for emoji substring matches
+    
     # Return the best score found
-    return max(fuzzy_score, word_score)
+    return max(fuzzy_score, word_score, emoji_score)
 
 def _find_best_player_matches(
     scoreboard_players: list[dict], expected_names: list[str]
@@ -362,21 +398,43 @@ def get_teams_from_match_data(
         match_data[team_key] = updated_team
     # --- End of new matching logic ---
 
-    # Decide CT vs T
+    # Determine which original team corresponds to which scoreboard team
     ct_team_players = {p["name"].lower(): p for p in match_data["ct_team"]}
+    t_team_players = {p["name"].lower(): p for p in match_data["t_team"]}
     
+    # Count how many players from each original team are found in each scoreboard team
     ct_matches_team1 = len(set(ct_team_players.keys()) & set(n.lower() for n in team1_players))
     ct_matches_team2 = len(set(ct_team_players.keys()) & set(n.lower() for n in team2_players))
+    t_matches_team1 = len(set(t_team_players.keys()) & set(n.lower() for n in team1_players))
+    t_matches_team2 = len(set(t_team_players.keys()) & set(n.lower() for n in team2_players))
+    
+    # Determine which original team corresponds to which scoreboard team
+    # CT team corresponds to the original team with more matches in CT
     ct_is_team1 = ct_matches_team1 > ct_matches_team2
-
+    # T team corresponds to the original team with more matches in T
+    t_is_team1 = t_matches_team1 > t_matches_team2
+    
+    # Get the scores
     ct_score, t_score = map(int, match_data["score"].split("-"))
-    winners_were_ct = ct_score > t_score
+    
+    # Determine which original team won based on which scoreboard team had the higher score
+    if ct_score > t_score:
+        # CT won, so the team that corresponds to CT is the winner
+        winning_original_team = team1_players if ct_is_team1 else team2_players
+        losing_original_team = team2_players if ct_is_team1 else team1_players
+        winning_scoreboard_team = "ct_team"
+        losing_scoreboard_team = "t_team"
+    else:
+        # T won, so the team that corresponds to T is the winner
+        winning_original_team = team1_players if t_is_team1 else team2_players
+        losing_original_team = team2_players if t_is_team1 else team1_players
+        winning_scoreboard_team = "t_team"
+        losing_scoreboard_team = "ct_team"
 
-    # Add absent players
-    ct_expected = team1_players if ct_is_team1 else team2_players
-    for stored_nick, player_info in ct_expected.items():
-        if stored_nick not in (p["name"] for p in match_data["ct_team"]):
-            match_data["ct_team"].append(
+    # Add absent players to the winning team
+    for stored_nick, player_info in winning_original_team.items():
+        if stored_nick not in (p["name"] for p in match_data[winning_scoreboard_team]):
+            match_data[winning_scoreboard_team].append(
                 {
                     "name": stored_nick,
                     "kills": 0,
@@ -394,10 +452,10 @@ def get_teams_from_match_data(
                 config.DEFAULT_ELO, player_data[player_info["id"]].get("elo", config.DEFAULT_ELO) - 20
             )
 
-    t_expected = team2_players if ct_is_team1 else team1_players
-    for stored_nick, player_info in t_expected.items():
-        if stored_nick not in (p["name"] for p in match_data["t_team"]):
-            match_data["t_team"].append(
+    # Add absent players to the losing team
+    for stored_nick, player_info in losing_original_team.items():
+        if stored_nick not in (p["name"] for p in match_data[losing_scoreboard_team]):
+            match_data[losing_scoreboard_team].append(
                 {
                     "name": stored_nick,
                     "kills": 0,
@@ -415,7 +473,20 @@ def get_teams_from_match_data(
                 config.DEFAULT_ELO, player_data[player_info["id"]].get("elo", config.DEFAULT_ELO) - 20
             )
 
-    winning_team = match_data["ct_team"] if winners_were_ct else match_data["t_team"]
-    losing_team = match_data["t_team"] if winners_were_ct else match_data["ct_team"]
+    # Set the winning and losing teams
+    winning_team = match_data[winning_scoreboard_team]
+    losing_team = match_data[losing_scoreboard_team]
+    winners_were_ct = winning_scoreboard_team == "ct_team"
+
+    # Final validation: Check for duplicate players between teams
+    winning_names = {p["name"].lower() for p in winning_team}
+    losing_names = {p["name"].lower() for p in losing_team}
+    duplicate_players = winning_names & losing_names
+    
+    if duplicate_players:
+        print(f"⚠️ Warning: Found duplicate players between teams: {duplicate_players}")
+        # Remove duplicates from losing team (keep them on winning team)
+        losing_team[:] = [p for p in losing_team if p["name"].lower() not in duplicate_players]
+        print(f"Removed duplicates from losing team. Losing team now has {len(losing_team)} players.")
 
     return winning_team, losing_team, winners_were_ct
