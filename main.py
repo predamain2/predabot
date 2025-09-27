@@ -1487,7 +1487,39 @@ async def on_message(message: discord.Message):
         
         # Check if submitter is on the winning team
         user_discord_id = message.author.id
-        winning_team_discord_ids = original_match['team1'] if ct_won else original_match['team2']
+        
+        # Determine which original team won based on the final score
+        # We need to figure out which original team corresponds to which scoreboard team
+        ct_team_players = {p["name"].lower(): p for p in match_data["ct_team"]}
+        t_team_players = {p["name"].lower(): p for p in match_data["t_team"]}
+        
+        # Get expected players for both original teams
+        team1_players = {}
+        team2_players = {}
+        for discord_id in original_match['team1']:
+            discord_id = str(discord_id)
+            if discord_id in player_data:
+                nick = player_data[discord_id]["nick"]
+                team1_players[nick.lower()] = discord_id
+        for discord_id in original_match['team2']:
+            discord_id = str(discord_id)
+            if discord_id in player_data:
+                nick = player_data[discord_id]["nick"]
+                team2_players[nick.lower()] = discord_id
+        
+        # Count matches to determine which original team corresponds to which scoreboard team
+        ct_matches_team1 = len(set(ct_team_players.keys()) & set(team1_players.keys()))
+        ct_matches_team2 = len(set(ct_team_players.keys()) & set(team2_players.keys()))
+        t_matches_team1 = len(set(t_team_players.keys()) & set(team1_players.keys()))
+        t_matches_team2 = len(set(t_team_players.keys()) & set(team2_players.keys()))
+        
+        # Determine which original team won
+        if ct_won:
+            # CT won, so the team that corresponds to CT is the winner
+            winning_team_discord_ids = original_match['team1'] if ct_matches_team1 > ct_matches_team2 else original_match['team2']
+        else:
+            # T won, so the team that corresponds to T is the winner
+            winning_team_discord_ids = original_match['team1'] if t_matches_team1 > t_matches_team2 else original_match['team2']
         
         if user_discord_id not in winning_team_discord_ids:
             # Clean up and reject submission
