@@ -292,6 +292,16 @@ def _calculate_name_similarity(scoreboard_name: str, expected_name: str) -> floa
     scoreboard_words = set(norm_scoreboard.split())
     expected_words = set(norm_expected.split())
     
+    # Special case: if we have compound names like "goatedBAKKI", try splitting on capital letters
+    if len(scoreboard_words) == 1 and len(expected_words) == 1:
+        # Try to split compound words like "goatedBAKKI" into ["goated", "bakki"]
+        import re
+        scoreboard_compound = re.findall(r'[A-Z][a-z]*|[a-z]+', norm_scoreboard)
+        expected_compound = re.findall(r'[A-Z][a-z]*|[a-z]+', norm_expected)
+        if scoreboard_compound and expected_compound:
+            scoreboard_words.update(scoreboard_compound)
+            expected_words.update(expected_compound)
+    
     if scoreboard_words and expected_words:
         word_overlap = len(scoreboard_words & expected_words)
         word_union = len(scoreboard_words | expected_words)
@@ -321,11 +331,11 @@ def _calculate_name_similarity(scoreboard_name: str, expected_name: str) -> floa
         for sw in scoreboard_words:
             for ew in expected_words:
                 # Check if the expected word is contained in the scoreboard word
-                if ew in sw:
+                if ew.lower() in sw.lower():
                     # Give high score for substring containment
                     substring_containment_score = max(substring_containment_score, 0.95)
                 # Also check reverse
-                if sw in ew:
+                if sw.lower() in ew.lower():
                     substring_containment_score = max(substring_containment_score, 0.95)
     
     # Strategy 5.6: Special word matching for compound names (like "goatedBAKKI")
@@ -392,17 +402,6 @@ def _calculate_name_similarity(scoreboard_name: str, expected_name: str) -> floa
     if 'bakki' in original_scoreboard.lower() and 'bakki' in original_expected.lower():
         prefix_suffix_score = max(prefix_suffix_score, 0.95)  # Very high score for Bakki variations
     
-    # Debug output for specific problematic cases
-    if 'goatedbakki' in original_scoreboard.lower() or 'tebioo' in original_scoreboard.lower():
-        print(f"DEBUG - Name matching for '{scoreboard_name}' -> '{expected_name}':")
-        print(f"  fuzzy_score: {fuzzy_score:.2f}")
-        print(f"  word_score: {word_score:.2f}")
-        print(f"  word_containment_score: {word_containment_score:.2f}")
-        print(f"  substring_containment_score: {substring_containment_score:.2f}")
-        print(f"  compound_score: {compound_score:.2f}")
-        print(f"  emoji_score: {emoji_score:.2f}")
-        print(f"  prefix_suffix_score: {prefix_suffix_score:.2f}")
-        print(f"  final_score: {max(fuzzy_score, word_score, word_containment_score, substring_containment_score, compound_score, emoji_score, prefix_suffix_score):.2f}")
     
     # Return the best score found
     return max(fuzzy_score, word_score, word_containment_score, substring_containment_score, compound_score, emoji_score, prefix_suffix_score)
