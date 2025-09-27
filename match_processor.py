@@ -401,19 +401,38 @@ def _calculate_name_similarity(scoreboard_name: str, expected_name: str) -> floa
     if 'bakki' in original_scoreboard.lower() and 'bakki' in original_expected.lower():
         prefix_suffix_score = max(prefix_suffix_score, 0.95)  # Very high score for Bakki variations
     
+    # Strategy 9: Strict validation - reject matches that are clearly wrong
+    # If the names don't share any significant common substring (3+ chars), reject low scores
+    common_substrings = []
+    for i in range(len(norm_scoreboard) - 2):
+        for j in range(len(norm_expected) - 2):
+            if norm_scoreboard[i:i+3] == norm_expected[j:j+3]:
+                common_substrings.append(norm_scoreboard[i:i+3])
+    
+    best_score = max(fuzzy_score, word_score, word_containment_score, substring_containment_score, compound_score, emoji_score, prefix_suffix_score)
+    
+    # If no common 3+ character substring and score is low, reject the match
+    if not common_substrings and best_score < 0.8:
+        return 0.0  # Reject completely unrelated names
+    
+    # Additional validation: names that are too different in length are likely wrong matches
+    length_ratio = min(len(norm_scoreboard), len(norm_expected)) / max(len(norm_scoreboard), len(norm_expected))
+    if length_ratio < 0.3 and best_score < 0.9:  # Very different lengths require very high confidence
+        return 0.0
     
     # Return the best score found
-    return max(fuzzy_score, word_score, word_containment_score, substring_containment_score, compound_score, emoji_score, prefix_suffix_score)
+    return best_score
 
 def _find_best_player_matches(
     scoreboard_players: list[dict], expected_names: list[str]
 ) -> dict[str, str]:
     """
     Finds the best unique matches between scoreboard players and expected players.
-    Uses improved matching logic to handle OCR errors and name variations.
+    Uses improved matching logic to handle OCR errors and name variations with stricter thresholds.
     """
     potential_matches = []
-    threshold = getattr(config, 'FUZZY_MATCH_THRESHOLD', 0.5)  # Lowered threshold for more lenient matching
+    # Raised threshold to be more strict and prevent bad matches
+    threshold = getattr(config, 'FUZZY_MATCH_THRESHOLD', 0.75)  # Much higher threshold for stricter matching
 
     # 1. Calculate a score for every possible scoreboard-to-expected player pair
     for s_player in scoreboard_players:
@@ -431,12 +450,17 @@ def _find_best_player_matches(
     used_expected_names = set()
 
     # 3. Iterate through the sorted list and lock in the best available matches
-    for _score, s_name, e_name in potential_matches:
+    # Only accept matches with very high confidence (0.85+) or perfect matches
+    for score, s_name, e_name in potential_matches:
         if s_name not in used_scoreboard_names and e_name not in used_expected_names:
-            best_matches[s_name] = e_name
-            used_scoreboard_names.add(s_name)
-            used_expected_names.add(e_name)
-            print(f"✅ Matched: '{s_name}' -> '{e_name}'")
+            # Additional validation: only accept very high confidence matches
+            if score >= 0.85 or score == 1.0:
+                best_matches[s_name] = e_name
+                used_scoreboard_names.add(s_name)
+                used_expected_names.add(e_name)
+                print(f"✅ Matched: '{s_name}' -> '{e_name}' (score: {score:.2f})")
+            else:
+                print(f"❌ Rejected low confidence match: '{s_name}' -> '{e_name}' (score: {score:.2f})")
 
     return best_matches
 
@@ -542,39 +566,9 @@ def get_teams_from_match_data(
     for player in match_data[winning_scoreboard_team]:
         winning_team.append(player)
     
-    # Add missing players from winning original team as absent
-    for stored_nick, player_info in winning_original_team.items():
-        if stored_nick not in (p["name"] for p in winning_team):
-            winning_team.append({
-                "name": stored_nick,
-                "kills": 0,
-                "assists": 0,
-                "deaths": 13,
-                "kd": 0.0,
-                "was_absent": True,
-                "elo_change": -20,
-            })
-            player_data[player_info["id"]]["losses"] = player_data[player_info["id"]].get("losses", 0) + 1
-            player_data[player_info["id"]]["elo"] = max(config.DEFAULT_ELO, player_data[player_info["id"]].get("elo", config.DEFAULT_ELO) - 20)
-    
     # Build the losing team from scoreboard players
     for player in match_data[losing_scoreboard_team]:
         losing_team.append(player)
-    
-    # Add missing players from losing original team as absent
-    for stored_nick, player_info in losing_original_team.items():
-        if stored_nick not in (p["name"] for p in losing_team):
-            losing_team.append({
-                "name": stored_nick,
-                "kills": 0,
-                "assists": 0,
-                "deaths": 13,
-                "kd": 0.0,
-                "was_absent": True,
-                "elo_change": -20,
-            })
-            player_data[player_info["id"]]["losses"] = player_data[player_info["id"]].get("losses", 0) + 1
-            player_data[player_info["id"]]["elo"] = max(config.DEFAULT_ELO, player_data[player_info["id"]].get("elo", config.DEFAULT_ELO) - 20)
     
     winners_were_ct = winning_scoreboard_team == "ct_team"
 
@@ -588,5 +582,72 @@ def get_teams_from_match_data(
         # Remove duplicates from losing team (keep them on winning team)
         losing_team[:] = [p for p in losing_team if p["name"].lower() not in duplicate_players]
         print(f"Removed duplicates from losing team. Losing team now has {len(losing_team)} players.")
+
+    # Ensure both teams have exactly 5 players by adding absent players as needed
+    def ensure_team_size(team: list, original_team_players: dict, team_name: str) -> list:
+        """Ensure a team has exactly 5 players by adding absent players if needed."""
+        current_players = {p["name"].lower() for p in team}
+        
+        # If team has more than 5 players, keep only the top 5 by performance (kills + assists)
+        if len(team) > 5:
+            print(f"⚠️ {team_name} has {len(team)} players, keeping top 5 by performance")
+            team.sort(key=lambda p: p.get("kills", 0) + p.get("assists", 0), reverse=True)
+            team = team[:5]
+            current_players = {p["name"].lower() for p in team}
+        
+        # If team has fewer than 5 players, add absent players from the original roster
+        missing_count = 5 - len(team)
+        if missing_count > 0:
+            print(f"⚠️ {team_name} has {len(team)} players, adding {missing_count} absent players")
+            
+            # Find players from original roster who aren't already on the team
+            available_absent = []
+            for stored_nick, player_info in original_team_players.items():
+                if stored_nick.lower() not in current_players:
+                    available_absent.append((stored_nick, player_info))
+            
+            # Add absent players up to the limit
+            for i, (stored_nick, player_info) in enumerate(available_absent[:missing_count]):
+                absent_player = {
+                    "name": stored_nick,
+                    "kills": 0,
+                    "assists": 0,
+                    "deaths": max(13, ct_score + t_score),  # Use actual match length
+                    "kd": 0.0,
+                    "was_absent": True,
+                    "elo_change": -20,
+                    "rating": 0.0
+                }
+                team.append(absent_player)
+                
+                # Update player stats for leaving
+                player_data[player_info["id"]]["losses"] = player_data[player_info["id"]].get("losses", 0) + 1
+                player_data[player_info["id"]]["elo"] = max(
+                    config.DEFAULT_ELO, 
+                    player_data[player_info["id"]].get("elo", config.DEFAULT_ELO) - 20
+                )
+                print(f"  Added absent player: {stored_nick}")
+        
+        return team
+
+    # Ensure both teams have exactly 5 players
+    winning_team = ensure_team_size(winning_team, winning_original_team, "Winning team")
+    losing_team = ensure_team_size(losing_team, losing_original_team, "Losing team")
+    
+    # Final verification
+    if len(winning_team) != 5:
+        print(f"❌ ERROR: Winning team still has {len(winning_team)} players after balancing!")
+    if len(losing_team) != 5:
+        print(f"❌ ERROR: Losing team still has {len(losing_team)} players after balancing!")
+    
+    # Verify no duplicates remain
+    final_winning_names = {p["name"].lower() for p in winning_team}
+    final_losing_names = {p["name"].lower() for p in losing_team}
+    final_duplicates = final_winning_names & final_losing_names
+    
+    if final_duplicates:
+        print(f"❌ ERROR: Duplicate players still exist after balancing: {final_duplicates}")
+    else:
+        print(f"✅ Team balancing complete: {len(winning_team)} vs {len(losing_team)} players")
 
     return winning_team, losing_team, winners_were_ct
