@@ -69,7 +69,7 @@ def get_elo_change(level: int, is_winner: bool) -> int:
 OCR_SPACE_API_KEY = ""
 
 # Player matching settings
-FUZZY_MATCH_THRESHOLD = 0.75  # Stricter threshold for player name matching
+FUZZY_MATCH_THRESHOLD = 0.70  # Balanced threshold for player name matching
 
 DEBUG_MODE = False
 DEBUG_PLAYERS = 3
