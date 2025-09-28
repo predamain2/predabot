@@ -5,6 +5,7 @@ from pathlib import Path
 import asyncio
 import time
 import config
+from error_logger import log_view_exception
 
 class EditMatchModal(Modal):
     def __init__(self, match_id, player_name, current_kills, current_assists, current_deaths, current_elo_change, bot):
@@ -118,6 +119,10 @@ class ConfirmEditView(View):
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger)
     async def cancel(self, interaction: discord.Interaction, button: Button):
         await interaction.response.send_message("Edit cancelled.", ephemeral=True)
+    
+    async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item):
+        """Handle errors in this view"""
+        log_view_exception(self, item, error)
 
 class StaffMatchControls(View):
     @discord.ui.button(label="Revert Scoreboard", style=discord.ButtonStyle.danger)
@@ -268,6 +273,10 @@ class StaffMatchControls(View):
         # Create a select menu with all players
         select = PlayerSelect(self.match_id, self.match_data, self.bot)
         await interaction.response.send_message("Select a player to edit:", view=select, ephemeral=True)
+    
+    async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item):
+        """Handle errors in this view"""
+        log_view_exception(self, item, error)
 
 class PlayerSelect(View):
     def __init__(self, match_id, match_data, bot):
@@ -313,6 +322,10 @@ class PlayerSelect(View):
             self.bot
         )
         await interaction.response.send_modal(modal)
+    
+    async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item):
+        """Handle errors in this view"""
+        log_view_exception(self, item, error)
 
 async def repost_game_results(bot, guild, match_id, match_data):
     """Delete the old game-results message for this match and resend an updated one.

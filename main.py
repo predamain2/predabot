@@ -5,6 +5,7 @@ from discord.ui import View, Select, Button
 import asyncio, random, uuid, json, pathlib, re, time
 import sys
 from datetime import datetime, timedelta
+from error_logger import log_discord_error, log_view_exception
 
 # ---------- Intents & Bot ----------
 intents = discord.Intents.default()
@@ -409,6 +410,10 @@ class HostInfoView(discord.ui.View):
     def __init__(self, host_mention, host_name, host_id):
         super().__init__(timeout=None)
         self.add_item(HostInfoButton(host_mention, host_name, host_id))
+    
+    async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item):
+        """Handle errors in this view"""
+        log_view_exception(self, item, error)
 
 # ---------- Registration modal & view ----------
 class RegisterModal(discord.ui.Modal, title="Player Registration"):
@@ -559,6 +564,10 @@ class RegisterView(View):
     @discord.ui.button(label="Register", style=discord.ButtonStyle.red, custom_id="standoff_register_btn")
     async def reg_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(RegisterModal())
+    
+    async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item):
+        """Handle errors in this view"""
+        log_view_exception(self, item, error)
 
 # ---------- Draft view (Select menu) ----------
 class DraftView(View):
@@ -826,6 +835,10 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
             lobby_status[channel_id] = {"message_id": newmsg.id, "state": "picking"}
 
         await interaction.response.defer()
+    
+    async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item):
+        """Handle errors in this view"""
+        log_view_exception(self, item, error)
 
 # ---------- Embeds / announce ----------
 def build_roster_embed(st):
@@ -1355,6 +1368,10 @@ class SubmitResultsView(View):
     @discord.ui.button(label="Submit Results", style=discord.ButtonStyle.red, custom_id="submit_results_btn")
     async def submit_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(SubmitResultsModal())
+    
+    async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item):
+        """Handle errors in this view"""
+        log_view_exception(self, item, error)
 
 # --- Helper: Post the submit message in submit channel ---
 async def post_submit_instructions():
@@ -3077,6 +3094,10 @@ async def party_invite(interaction: discord.Interaction, player: discord.Member)
             
             await button_interaction.message.edit(content=f"**{button_interaction.user.display_name}** declined **{interaction.user.display_name}**'s party invite.", view=None)
             self.stop()
+        
+        async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item):
+            """Handle errors in this view"""
+            log_view_exception(self, item, error)
     
     view = InviteView()
     commands_channel = interaction.guild.get_channel(COMMANDS_CHANNEL_ID)
@@ -3308,6 +3329,10 @@ async def reset_season(interaction: discord.Interaction):
                 
                 await button_interaction.response.send_message("✅ Season reset cancelled.", ephemeral=True)
                 self.stop()
+            
+            async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item):
+                """Handle errors in this view"""
+                log_view_exception(self, item, error)
         
         view = ConfirmResetView()
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
@@ -3997,6 +4022,10 @@ async def remove_banned_players(interaction: discord.Interaction):
                 
                 await button_interaction.response.send_message("✅ Removal cancelled.", ephemeral=True)
                 self.stop()
+            
+            async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item):
+                """Handle errors in this view"""
+                log_view_exception(self, item, error)
         
         view = ConfirmRemovalView()
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
@@ -4095,6 +4124,65 @@ async def remove_banned_players(interaction: discord.Interaction):
         )
         await interaction.edit_original_response(embed=error_embed, view=None)
         print(f"Error in remove_banned_players command: {str(e)}")
+
+
+# ========== ERROR HANDLERS ==========
+
+@bot.event
+async def on_error(event, *args, **kwargs):
+    """Handle general bot errors"""
+    import traceback
+    error = traceback.format_exc()
+    print(f"Bot error in event '{event}': {error}")
+    
+    # Create a fake exception for logging
+    try:
+        raise Exception(f"Bot error in event '{event}': {error}")
+    except Exception as e:
+        log_discord_error(e, additional_context={
+            "event_name": event,
+            "args": str(args)[:500],  # Truncate to avoid huge logs
+            "kwargs": str(kwargs)[:500]
+        })
+
+@bot.event
+async def on_command_error(ctx, error):
+    """Handle command errors (prefix commands)"""
+    print(f"Command error in '{ctx.command}': {error}")
+    
+    log_discord_error(error, additional_context={
+        "command_name": str(ctx.command) if ctx.command else "Unknown",
+        "author_id": str(ctx.author.id) if ctx.author else None,
+        "author_name": str(ctx.author) if ctx.author else None,
+        "channel_id": str(ctx.channel.id) if ctx.channel else None,
+        "guild_id": str(ctx.guild.id) if ctx.guild else None,
+        "message_content": ctx.message.content[:200] if ctx.message else None  # Truncated
+    })
+
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError):
+    """Handle application command errors (slash commands)"""
+    print(f"App command error: {error}")
+    
+    log_discord_error(error, interaction=interaction, additional_context={
+        "command_name": interaction.command.name if interaction.command else "Unknown",
+        "command_type": "slash_command"
+    })
+    
+    # Try to respond to the user if we haven't already
+    try:
+        if not interaction.response.is_done():
+            await interaction.response.send_message(
+                "❌ An error occurred while processing your command. The error has been logged.",
+                ephemeral=True
+            )
+        else:
+            await interaction.followup.send(
+                "❌ An error occurred while processing your command. The error has been logged.",
+                ephemeral=True
+            )
+    except Exception as response_error:
+        print(f"Failed to send error response: {response_error}")
 
 
 if __name__ == '__main__':
