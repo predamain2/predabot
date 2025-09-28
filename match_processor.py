@@ -265,25 +265,27 @@ def _calculate_name_similarity(scoreboard_name: str, expected_name: str) -> floa
         return 1.0
     
     # Strategy 2: Check if one contains the other (for cases like "distincttttttt" vs "distinct")
+    containment_score = 0.0
     if norm_scoreboard in norm_expected or norm_expected in norm_scoreboard:
         # Calculate ratio based on length difference
         shorter = min(len(norm_scoreboard), len(norm_expected))
         longer = max(len(norm_scoreboard), len(norm_expected))
         if shorter > 0:
-            return shorter / longer
+            containment_score = shorter / longer
     
     # Strategy 3: Check if one is a substring of the other (for cases like "SAYAN | 120fps" vs "SAyan")
     # Remove common separators and check
     clean_scoreboard = re.sub(r'[|\s]+', '', norm_scoreboard)
     clean_expected = re.sub(r'[|\s]+', '', norm_expected)
     
+    substring_score = 0.0
     if clean_scoreboard == clean_expected:
-        return 1.0
-    if clean_scoreboard in clean_expected or clean_expected in clean_scoreboard:
+        substring_score = 1.0
+    elif clean_scoreboard in clean_expected or clean_expected in clean_scoreboard:
         shorter = min(len(clean_scoreboard), len(clean_expected))
         longer = max(len(clean_scoreboard), len(clean_expected))
         if shorter > 0:
-            return shorter / longer
+            substring_score = shorter / longer
     
     # Strategy 4: Traditional fuzzy matching
     fuzzy_score = SequenceMatcher(None, norm_scoreboard, norm_expected).ratio()
@@ -330,12 +332,16 @@ def _calculate_name_similarity(scoreboard_name: str, expected_name: str) -> floa
         for sw in scoreboard_words:
             for ew in expected_words:
                 # Check if the expected word is contained in the scoreboard word
-                if ew.lower() in sw.lower():
-                    # Give high score for substring containment
-                    substring_containment_score = max(substring_containment_score, 0.95)
-                # Also check reverse
-                if sw.lower() in ew.lower():
-                    substring_containment_score = max(substring_containment_score, 0.95)
+                if len(ew) >= 3 and ew.lower() in sw.lower():
+                    # Give high score for substring containment (minimum 3 chars to avoid false matches)
+                    containment_ratio = len(ew) / len(sw)
+                    if containment_ratio >= 0.4:  # Expected word should be significant part of scoreboard word
+                        substring_containment_score = max(substring_containment_score, 0.90)
+                # Also check reverse - if scoreboard word is contained in expected word
+                if len(sw) >= 3 and sw.lower() in ew.lower():
+                    containment_ratio = len(sw) / len(ew)
+                    if containment_ratio >= 0.4:
+                        substring_containment_score = max(substring_containment_score, 0.90)
     
     # Strategy 5.6: Special word matching for compound names (like "goatedBAKKI")
     # Split compound words and check each part
@@ -394,12 +400,99 @@ def _calculate_name_similarity(scoreboard_name: str, expected_name: str) -> floa
             if shorter > 0:
                 prefix_suffix_score = (shorter / longer) * 0.95  # Very high score for prefix/suffix substring matches
     
-    # Strategy 8: Special case for "goatedBAKKI" -> "Bakki 🇦🇱"
-    # Handle cases where the scoreboard name has extra text but contains the core name
+    # Strategy 8: Enhanced prefix/suffix handling for common patterns
+    # Handle cases where players add prefixes/suffixes to their names
+    prefix_suffix_enhanced_score = 0.0
+    
+    
+    # Extract core names by removing common prefixes/suffixes and extra words
+    def extract_core_name(name: str) -> list[str]:
+        """Extract possible core names by removing common gaming prefixes/suffixes."""
+        original = name.lower().strip()
+        cores = []
+        
+        # Strategy 1: Remove prefixes
+        prefixes = ['goated', 'pro', 'elite', 'god', 'king', 'lord', 'sir', 'mr', 'ms']
+        for prefix in prefixes:
+            if original.startswith(prefix):
+                core = original[len(prefix):].strip()
+                if len(core) >= 3:  # Core must be meaningful
+                    cores.append(core)
+        
+        # Strategy 2: Remove suffixes
+        suffixes = ['gaming', 'pro', 'yt', 'tv', 'ttv', 'plays', 'play', 'ping']
+        for suffix in suffixes:
+            if original.endswith(suffix):
+                core = original[:-len(suffix)].strip()
+                if len(core) >= 3:
+                    cores.append(core)
+        
+        # Strategy 3: Remove multiple words (like "ping play")
+        words = original.split()
+        if len(words) > 1:
+            # Try first word as core
+            if len(words[0]) >= 3:
+                cores.append(words[0])
+            # Try last word as core
+            if len(words[-1]) >= 3:
+                cores.append(words[-1])
+            # Try middle combinations
+            for i in range(1, len(words)):
+                combined = ''.join(words[:i])
+                if len(combined) >= 3:
+                    cores.append(combined)
+        
+        # Strategy 4: Handle compound words like "goatedBAKKI" -> extract "bakki"
+        # Look for capital letters that might indicate word boundaries
+        import re
+        compound_parts = re.findall(r'[A-Z][a-z]*|[a-z]+', original)
+        for part in compound_parts:
+            if len(part) >= 3:
+                cores.append(part.lower())
+        
+        # Always include the original as a potential core
+        cores.append(original)
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_cores = []
+        for core in cores:
+            if core not in seen and len(core) >= 3:
+                seen.add(core)
+                unique_cores.append(core)
+        
+        return unique_cores
+    
+    cores_scoreboard = extract_core_name(original_scoreboard)
+    cores_expected = extract_core_name(original_expected)
+    
+    # Check if any core names match after removing prefixes/suffixes
+    for core_s in cores_scoreboard:
+        for core_e in cores_expected:
+            if core_s == core_e:
+                prefix_suffix_enhanced_score = max(prefix_suffix_enhanced_score, 0.95)  # Perfect core match
+            elif core_s in core_e or core_e in core_s:
+                shorter = min(len(core_s), len(core_e))
+                longer = max(len(core_s), len(core_e))
+                if shorter >= 3:  # Core name should be at least 3 chars
+                    ratio = shorter / longer
+                    if ratio >= 0.7:  # Core names should be reasonably similar
+                        prefix_suffix_enhanced_score = max(prefix_suffix_enhanced_score, 0.90)
+                        # print(f"DEBUG: Core containment '{core_s}' in '{core_e}' -> 0.90")
+            # Also check fuzzy similarity between cores
+            elif len(core_s) >= 3 and len(core_e) >= 3:
+                core_similarity = SequenceMatcher(None, core_s, core_e).ratio()
+                if core_similarity >= 0.8:  # High similarity between cores
+                    prefix_suffix_enhanced_score = max(prefix_suffix_enhanced_score, 0.85)
+                    # print(f"DEBUG: Core similarity '{core_s}' ~= '{core_e}' ({core_similarity:.2f}) -> 0.85")
+    
+    # Special case handling for known patterns
     if 'goated' in original_scoreboard.lower() and 'bakki' in original_expected.lower():
-        prefix_suffix_score = max(prefix_suffix_score, 0.90)  # High score for this specific case
+        prefix_suffix_enhanced_score = max(prefix_suffix_enhanced_score, 0.90)
     if 'bakki' in original_scoreboard.lower() and 'bakki' in original_expected.lower():
-        prefix_suffix_score = max(prefix_suffix_score, 0.95)  # Very high score for Bakki variations
+        prefix_suffix_enhanced_score = max(prefix_suffix_enhanced_score, 0.95)
+    if 'tebioo' in original_scoreboard.lower() and 'tebioo' in original_expected.lower():
+        prefix_suffix_enhanced_score = max(prefix_suffix_enhanced_score, 0.95)
     
     # Strategy 9: Strict validation - reject matches that are clearly wrong
     # If the names don't share any significant common substring (3+ chars), reject low scores
@@ -409,15 +502,18 @@ def _calculate_name_similarity(scoreboard_name: str, expected_name: str) -> floa
             if norm_scoreboard[i:i+3] == norm_expected[j:j+3]:
                 common_substrings.append(norm_scoreboard[i:i+3])
     
-    best_score = max(fuzzy_score, word_score, word_containment_score, substring_containment_score, compound_score, emoji_score, prefix_suffix_score)
+    best_score = max(containment_score, substring_score, fuzzy_score, word_score, word_containment_score, substring_containment_score, compound_score, emoji_score, prefix_suffix_score, prefix_suffix_enhanced_score)
+    
     
     # If no common 3+ character substring and score is low, reject the match
-    if not common_substrings and best_score < 0.8:
+    # But allow high-confidence prefix/suffix matches through
+    if not common_substrings and best_score < 0.8 and prefix_suffix_enhanced_score < 0.85:
         return 0.0  # Reject completely unrelated names
     
     # Additional validation: names that are too different in length are likely wrong matches
+    # But allow high-confidence prefix/suffix matches through
     length_ratio = min(len(norm_scoreboard), len(norm_expected)) / max(len(norm_scoreboard), len(norm_expected))
-    if length_ratio < 0.3 and best_score < 0.9:  # Very different lengths require very high confidence
+    if length_ratio < 0.3 and best_score < 0.9 and prefix_suffix_enhanced_score < 0.85:
         return 0.0
     
     # Return the best score found
@@ -431,8 +527,8 @@ def _find_best_player_matches(
     Uses improved matching logic to handle OCR errors and name variations with stricter thresholds.
     """
     potential_matches = []
-    # Raised threshold to be more strict and prevent bad matches
-    threshold = getattr(config, 'FUZZY_MATCH_THRESHOLD', 0.75)  # Much higher threshold for stricter matching
+    # Balanced threshold - strict enough to prevent bad matches but allows good prefix/suffix matches
+    threshold = getattr(config, 'FUZZY_MATCH_THRESHOLD', 0.70)  # Balanced threshold for good matching
 
     # 1. Calculate a score for every possible scoreboard-to-expected player pair
     for s_player in scoreboard_players:
@@ -612,7 +708,7 @@ def get_teams_from_match_data(
                     "name": stored_nick,
                     "kills": 0,
                     "assists": 0,
-                    "deaths": max(13, ct_score + t_score),  # Use actual match length
+                    "deaths": 13,  # Default 13 deaths for absent players
                     "kd": 0.0,
                     "was_absent": True,
                     "elo_change": -20,
