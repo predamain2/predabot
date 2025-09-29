@@ -5,6 +5,8 @@ from discord.ui import View, Select, Button
 import asyncio, random, uuid, json, pathlib, re, time
 import sys
 from datetime import datetime, timedelta
+from interaction_utils import SafeView, InteractionSafety, safe_interaction
+from bot_error_handler import BotErrorHandler
 
 # ---------- Intents & Bot ----------
 intents = discord.Intents.default()
@@ -381,6 +383,7 @@ class HostInfoButton(discord.ui.Button):
         self.host_name = host_name
         self.host_id = host_id
 
+    @safe_interaction
     async def callback(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="🎮 Match Host Information",
@@ -403,9 +406,9 @@ class HostInfoButton(discord.ui.Button):
         embed.description = "\n".join(info_lines)
         embed.set_footer(text="Powered by Major Esports | Developed by narcissist.")
         
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await InteractionSafety.safe_respond(interaction, embed=embed, ephemeral=True)
 
-class HostInfoView(discord.ui.View):
+class HostInfoView(SafeView):
     def __init__(self, host_mention, host_name, host_id):
         super().__init__(timeout=None)
         self.add_item(HostInfoButton(host_mention, host_name, host_id))
@@ -552,27 +555,36 @@ class RegisterModal(discord.ui.Modal, title="Player Registration"):
         if general_cog:
             await general_cog.update_leaderboard_if_needed(guild)
 
-class RegisterView(View):
+class RegisterView(SafeView):
     def __init__(self):
-        super().__init__(timeout=None)
+        super().__init__(timeout=None)  # Keep None for persistent views
 
     @discord.ui.button(label="Register", style=discord.ButtonStyle.red, custom_id="standoff_register_btn")
     async def reg_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(RegisterModal())
 
 # ---------- Draft view (Select menu) ----------
-class DraftView(View):
+class DraftView(SafeView):
     def __init__(self, channel_id):
-        super().__init__(timeout=None)
+        # Set timeout to 15 minutes instead of None to prevent internal Discord.py issues
+        super().__init__(timeout=900.0)  # 15 minutes
         self.channel_id = channel_id
+        self._select_component = None
         self.build_select()
         # Add ReHost vote button
         self.add_item(self.RehostButton(self.channel_id))
+        
+        # Add cleanup callback to remove from active_picks if needed
+        def cleanup():
+            if self.channel_id in active_picks:
+                print(f"DraftView timed out for channel {self.channel_id}")
+        self.add_cleanup_callback(cleanup)
 
     def build_select(self):
-        # clear previous items
-        for c in list(self.children):
-            self.remove_item(c)
+        # Remove only the select component, keep other items like RehostButton
+        if self._select_component:
+            self.remove_item(self._select_component)
+            self._select_component = None
 
         st = active_picks.get(self.channel_id)
         if not st:
@@ -616,23 +628,30 @@ class DraftView(View):
         if not opts:
             return
 
-        select = Select(placeholder="Pick a player...", min_values=1, max_values=1, options=opts)
-
-        async def on_select(interaction: discord.Interaction):
-            await handle_pick_select(interaction, self.channel_id, select.values[0])
-
-        select.callback = on_select
-        self.add_item(select)
+        # Import SafeSelect here to avoid circular imports
+        from interaction_utils import SafeSelect
+        
+        # Create new select with safer callback handling
+        self._select_component = SafeSelect(
+            placeholder="Pick a player...", 
+            min_values=1, 
+            max_values=1, 
+            options=opts,
+            channel_id=self.channel_id,
+            callback_func=handle_pick_select
+        )
+        self.add_item(self._select_component)
 
     class RehostButton(discord.ui.Button):
         def __init__(self, channel_id: int):
             super().__init__(label="ReHost", style=discord.ButtonStyle.danger)
             self.channel_id = channel_id
 
+        @safe_interaction
         async def callback(self, interaction: discord.Interaction):
             st = active_picks.get(self.channel_id)
             if not st:
-                await interaction.response.send_message("No active draft.", ephemeral=True, delete_after=5)
+                await InteractionSafety.safe_respond(interaction, "No active draft.", ephemeral=True)
                 return
             # Ensure vote store
             if "rehost_votes" not in st:
@@ -640,13 +659,13 @@ class DraftView(View):
             voter_id = str(interaction.user.id)
             # Prevent double voting
             if voter_id in st["rehost_votes"]:
-                await interaction.response.send_message("You already voted to rehost.", ephemeral=True, delete_after=5)
+                await InteractionSafety.safe_respond(interaction, "You already voted to rehost.", ephemeral=True)
                 return
 
             # Must be in a lobby voice channel
             user_voice_channel = interaction.user.voice.channel if interaction.user.voice else None
             if not user_voice_channel or not is_lobby_voice_channel(user_voice_channel.id):
-                await interaction.response.send_message("Join a lobby voice channel to vote.", ephemeral=True, delete_after=5)
+                await InteractionSafety.safe_respond(interaction, "Join a lobby voice channel to vote.", ephemeral=True)
                 return
 
             # Record vote
@@ -664,7 +683,8 @@ class DraftView(View):
                 try:
                     msg = await chan.fetch_message(msg_id)
                     embed = build_roster_embed(st)
-                    await msg.edit(embed=embed, view=DraftView(self.channel_id))
+                    new_view = DraftView(self.channel_id)
+                    await InteractionSafety.safe_edit_message(msg, embed=embed, view=new_view)
                 except Exception:
                     pass
 
@@ -672,23 +692,20 @@ class DraftView(View):
                 # Trigger rehost: reset captains and restart picking
                 prev_caps = (st.get("captain_ct"), st.get("captain_t"))
                 st["rehost_votes"] = set()
-                try:
-                    await interaction.response.send_message("Rehosting…", ephemeral=True, delete_after=3)
-                except Exception:
-                    pass
+                await InteractionSafety.safe_respond(interaction, "Rehosting…", ephemeral=True)
                 await rehost_picking(chan, prev_caps)
             else:
-                await interaction.response.send_message(
+                await InteractionSafety.safe_respond(
+                    interaction,
                     f"ReHost vote registered {len(st['rehost_votes'])}/{threshold}.",
-                    ephemeral=True,
-                    delete_after=5
+                    ephemeral=True
                 )
 
 
 async def handle_pick_select(interaction: discord.Interaction, channel_id: int, selected_id: str):
     st = active_picks.get(channel_id)
     if not st:
-        await interaction.response.send_message("Draft isn't active here.", ephemeral=True)
+        await InteractionSafety.safe_respond(interaction, "Draft isn't active here.", ephemeral=True)
         return
 
     # Lock per-lobby to avoid concurrency races
@@ -696,11 +713,11 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
         # Identify current picker (captain_ct or captain_t)
         current_picker = st.get("pick_turn")
         if not current_picker:
-            await interaction.response.send_message("No picker is set.", ephemeral=True)
+            await InteractionSafety.safe_respond(interaction, "No picker is set.", ephemeral=True)
             return
 
         if str(getattr(interaction.user, "id", interaction.user)) != str(getattr(current_picker, "id", current_picker)):
-            await interaction.response.send_message("It's not your turn to pick.", ephemeral=True)
+            await InteractionSafety.safe_respond(interaction, "It's not your turn to pick.", ephemeral=True)
             return
 
         # Find the selected member object in waiting
@@ -710,7 +727,7 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
                 picked = m
                 break
         if not picked:
-            await interaction.response.send_message("That player is no longer available.", ephemeral=True)
+            await InteractionSafety.safe_respond(interaction, "That player is no longer available.", ephemeral=True)
             return
 
         # Determine which team is picking now
@@ -744,7 +761,8 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
 
         # Enforce team size (5v5)
         if len(picking_team) + 1 + len(party_followers) > 5:
-            await interaction.response.send_message(
+            await InteractionSafety.safe_respond(
+                interaction,
                 "Cannot pick this player—their party would exceed the 5-player limit.",
                 ephemeral=True
             )
@@ -782,13 +800,10 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
         if not st["waiting"]:
             # mark UI
             if msg:
-                try:
-                    embed = discord.Embed(title="✅ Teams complete — proceeding to Map Ban", color=discord.Color.red())
-                    if "match_id" in st:
-                        embed.add_field(name="Match ID", value=f"`{st['match_id']}`", inline=False)
-                    await msg.edit(embed=embed, view=None, content=None)
-                except Exception:
-                    pass
+                embed = discord.Embed(title="✅ Teams complete — proceeding to Map Ban", color=discord.Color.red())
+                if "match_id" in st:
+                    embed.add_field(name="Match ID", value=f"`{st['match_id']}`", inline=False)
+                await InteractionSafety.safe_edit_message(msg, embed=embed, view=None, content=None)
 
             # Start map ban via the MapBan cog (uses your existing signature)
             map_cog = bot.get_cog("MapBan")
@@ -809,23 +824,20 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
             # cleanup
             active_picks.pop(channel_id, None)
             lobby_status[channel_id] = {"message_id": msg_id, "state": "mapban"}
-            await interaction.response.defer()
+            await InteractionSafety.safe_defer(interaction)
             return
 
         # Otherwise, refresh the roster message and keep drafting
         new_embed = build_roster_embed(st)
         new_view = DraftView(channel_id)
         if msg:
-            try:
-                await msg.edit(embed=new_embed, view=new_view)
-            except Exception:
-                await chan.send(embed=new_embed, view=new_view)
+            await InteractionSafety.safe_edit_message(msg, embed=new_embed, view=new_view)
         else:
             newmsg = await chan.send(embed=new_embed, view=new_view)
             st["message_id"] = newmsg.id
             lobby_status[channel_id] = {"message_id": newmsg.id, "state": "picking"}
 
-        await interaction.response.defer()
+        await InteractionSafety.safe_defer(interaction)
 
 # ---------- Embeds / announce ----------
 def build_roster_embed(st):
@@ -1194,9 +1206,7 @@ async def start_picking_stage(channel: discord.TextChannel, member_list):
     embed = build_roster_embed(st)
     view = DraftView(chan_id)
     if msg:
-        try:
-            await msg.edit(embed=embed, view=view)
-        except Exception:
+        if not await InteractionSafety.safe_edit_message(msg, embed=embed, view=view):
             newmsg = await channel.send(embed=embed, view=view)
             st["message_id"] = newmsg.id
             lobby_status[chan_id] = {"message_id": newmsg.id, "state": "picking"}
@@ -1247,7 +1257,7 @@ async def cancel_session_and_reset(channel_id, reason="A player left. Lobby rese
             else:
                 # Reset to waiting state for other cases
                 embed = discord.Embed(title="Lobby reset", description=reason + "\n\nWaiting for players...", color=discord.Color.red())
-                await msg.edit(embed=embed, view=None, content=None)
+                await InteractionSafety.safe_edit_message(msg, embed=embed, view=None, content=None)
                 # update lobby_status state
                 lobby_status[channel_id] = {"message_id": msg.id, "state": "waiting", "reset_reason": reason}
         except Exception:
@@ -1348,7 +1358,7 @@ class SubmitResultsModal(discord.ui.Modal, title="Submit Scoreboard"):
             )
 
 # --- View with button in submit channel ---
-class SubmitResultsView(View):
+class SubmitResultsView(SafeView):
     def __init__(self):
         super().__init__(timeout=None)
 
@@ -1927,7 +1937,7 @@ async def on_message(message: discord.Message):
         except Exception as e:
             error_msg = f"⚠️ Failed to send match results to {dest.mention}: {str(e)}"
             print(error_msg)  # Log the error
-            await loading_msg.edit(embed=discord.Embed(title="Error", description=error_msg, color=discord.Color.red()))
+            await InteractionSafety.safe_edit_message(loading_msg, embed=discord.Embed(title="Error", description=error_msg, color=discord.Color.red()))
 
 # =========================================================
 #                       EVENTS
@@ -1939,6 +1949,14 @@ async def on_ready():
     timeouts = load_timeouts()
 
     print('Bot ready', bot.user)
+
+    # Initialize error handler
+    error_handler = BotErrorHandler(bot)
+    await error_handler.setup_error_handlers()
+    
+    # Start cleanup task
+    asyncio.create_task(error_handler.handle_view_timeout_cleanup())
+    print("Error handling system initialized.")
 
     print("Starting bot setup...")
     
@@ -3032,7 +3050,7 @@ async def party_invite(interaction: discord.Interaction, player: discord.Member)
         'expires_at': time.time() + 60  # Expires in 60 seconds
     }
     
-    class InviteView(discord.ui.View):
+    class InviteView(SafeView):
         def __init__(self):
             super().__init__(timeout=60)
             
@@ -3285,7 +3303,7 @@ async def reset_season(interaction: discord.Interaction):
         )
         
         # Create confirmation view
-        class ConfirmResetView(discord.ui.View):
+        class ConfirmResetView(SafeView):
             def __init__(self):
                 super().__init__(timeout=60.0)
                 self.confirmed = False
@@ -3974,7 +3992,7 @@ async def remove_banned_players(interaction: discord.Interaction):
         )
         
         # Create confirmation view
-        class ConfirmRemovalView(discord.ui.View):
+        class ConfirmRemovalView(SafeView):
             def __init__(self):
                 super().__init__(timeout=60.0)
                 self.confirmed = False
