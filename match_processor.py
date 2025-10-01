@@ -536,7 +536,7 @@ def _find_best_player_matches(
             similarity = _calculate_name_similarity(s_player["name"], e_name)
             if similarity >= threshold:
                 potential_matches.append((similarity, s_player["name"], e_name))
-                print(f"🔍 Potential match: '{s_player['name']}' -> '{e_name}' (similarity: {similarity:.2f})")
+                print(f"[POTENTIAL] Potential match: '{s_player['name']}' -> '{e_name}' (similarity: {similarity:.2f})")
 
     # 2. Sort all potential matches from highest score (best match) to lowest
     potential_matches.sort(key=lambda x: x[0], reverse=True)
@@ -554,11 +554,48 @@ def _find_best_player_matches(
                 best_matches[s_name] = e_name
                 used_scoreboard_names.add(s_name)
                 used_expected_names.add(e_name)
-                print(f"✅ Matched: '{s_name}' -> '{e_name}' (score: {score:.2f})")
+                print(f"[MATCHED] Matched: '{s_name}' -> '{e_name}' (score: {score:.2f})")
             else:
-                print(f"❌ Rejected low confidence match: '{s_name}' -> '{e_name}' (score: {score:.2f})")
+                print(f"[REJECT] Rejected low confidence match: '{s_name}' -> '{e_name}' (score: {score:.2f})")
 
     return best_matches
+
+
+def _match_side_and_score(scoreboard_players: list[dict], expected_names: list[str]):
+    """
+    Attempt to find best unique matches between a single scoreboard side and an expected side.
+    Returns (accepted_matches_dict, num_accepted, sum_scores)
+    This duplicates the greedy matching used above but also returns metrics used for auto-detection.
+    """
+    potential_matches = []
+    threshold = getattr(config, 'FUZZY_MATCH_THRESHOLD', 0.70)
+
+    for s_player in scoreboard_players:
+        for e_name in expected_names:
+            score = _calculate_name_similarity(s_player["name"], e_name)
+            if score >= threshold:
+                potential_matches.append((score, s_player["name"], e_name))
+
+    potential_matches.sort(key=lambda x: x[0], reverse=True)
+
+    accepted = {}
+    used_s = set()
+    used_e = set()
+    sum_scores = 0.0
+    num_accepted = 0
+
+    for score, s_name, e_name in potential_matches:
+        if s_name in used_s or e_name in used_e:
+            continue
+        # Only lock-in high confidence matches for final acceptance
+        if score >= 0.85 or score == 1.0:
+            accepted[s_name] = e_name
+            used_s.add(s_name)
+            used_e.add(e_name)
+            sum_scores += score
+            num_accepted += 1
+
+    return accepted, num_accepted, sum_scores
 
 
 def get_teams_from_match_data(
@@ -584,22 +621,59 @@ def get_teams_from_match_data(
     team1_players, team2_players = _build_expected_rosters(original_match, player_data)
     all_expected_names = list(team1_players.keys()) + list(team2_players.keys())
 
-    # --- Start of new matching logic ---
-    # Find the best possible unique matches across both teams
-    all_scoreboard_players = match_data["ct_team"] + match_data["t_team"]
-    best_matches = _find_best_player_matches(all_scoreboard_players, all_expected_names)
+    # --- Start of side-aware matching logic with auto-detection ---
+    # Build expected names per original team (lowercased keys are stored in teamX_players)
+    expected_team1 = list(team1_players.keys())
+    expected_team2 = list(team2_players.keys())
 
-    # Update player names to their canonical nick & drop unmatched players
-    for team_key in ["ct_team", "t_team"]:
-        updated_team = []
-        for player in match_data[team_key]:
-            if player["name"] in best_matches:
-                player["name"] = best_matches[player["name"]]  # Standardize name
-                updated_team.append(player)
+    # Scoreboard sides
+    scoreboard_ct = match_data["ct_team"]
+    scoreboard_t = match_data["t_team"]
+
+    # Try mapping A: scoreboard_ct -> expected_team1 AND scoreboard_t -> expected_team2 (no swap)
+    a_ct_matches, a_ct_count, a_ct_score = _match_side_and_score(scoreboard_ct, expected_team1)
+    a_t_matches, a_t_count, a_t_score = _match_side_and_score(scoreboard_t, expected_team2)
+    a_total_count = a_ct_count + a_t_count
+    a_total_score = a_ct_score + a_t_score
+
+    # Try mapping B: scoreboard_ct -> expected_team2 AND scoreboard_t -> expected_team1 (swapped)
+    b_ct_matches, b_ct_count, b_ct_score = _match_side_and_score(scoreboard_ct, expected_team2)
+    b_t_matches, b_t_count, b_t_score = _match_side_and_score(scoreboard_t, expected_team1)
+    b_total_count = b_ct_count + b_t_count
+    b_total_score = b_ct_score + b_t_score
+
+    print(f"[AUTO-DETECT] mapping scores: A_count={a_total_count} A_score={a_total_score:.2f} | B_count={b_total_count} B_score={b_total_score:.2f}")
+
+    # Choose the mapping with more accepted matches, break ties by sum of scores
+    if (b_total_count > a_total_count) or (b_total_count == a_total_count and b_total_score > a_total_score):
+        chosen_mapping = "B"
+        ct_to_expected = b_ct_matches
+        t_to_expected = b_t_matches
+        # Record which expected dict maps to which original team
+        ct_maps_to_team = 2
+    else:
+        chosen_mapping = "A"
+        ct_to_expected = a_ct_matches
+        t_to_expected = a_t_matches
+        ct_maps_to_team = 1
+
+    print(f"[AUTO-DETECT] Chosen mapping: {chosen_mapping} (ct maps to team{ct_maps_to_team})")
+
+    # Apply the chosen matches to the match_data, standardizing names only within each side
+    def _apply_side_matches(scoreboard_side: list[dict], mapping: dict) -> list[dict]:
+        updated = []
+        for p in scoreboard_side:
+            if p["name"] in mapping:
+                p["name"] = mapping[p["name"]]
+                updated.append(p)
             else:
-                print(f"⚠️ Dropping unmatched player: {player['name']}")
-        match_data[team_key] = updated_team
-    # --- End of new matching logic ---
+                print(f"[UNMATCHED] Dropping unmatched player on side: {p['name']}")
+        return updated
+
+    match_data["ct_team"] = _apply_side_matches(scoreboard_ct, ct_to_expected)
+    match_data["t_team"] = _apply_side_matches(scoreboard_t, t_to_expected)
+
+    # --- End of side-aware matching logic ---
 
     # Get the scores
     ct_score, t_score = map(int, match_data["score"].split("-"))
@@ -686,7 +760,7 @@ def get_teams_from_match_data(
         
         # If team has more than 5 players, keep only the top 5 by performance (kills + assists)
         if len(team) > 5:
-            print(f"⚠️ {team_name} has {len(team)} players, keeping top 5 by performance")
+            print(f"[WARN] {team_name} has {len(team)} players, keeping top 5 by performance")
             team.sort(key=lambda p: p.get("kills", 0) + p.get("assists", 0), reverse=True)
             team = team[:5]
             current_players = {p["name"].lower() for p in team}
@@ -694,7 +768,7 @@ def get_teams_from_match_data(
         # If team has fewer than 5 players, add absent players from the original roster
         missing_count = 5 - len(team)
         if missing_count > 0:
-            print(f"⚠️ {team_name} has {len(team)} players, adding {missing_count} absent players")
+            print(f"[WARN] {team_name} has {len(team)} players, adding {missing_count} absent players")
             
             # Find players from original roster who aren't already on the team
             available_absent = []
@@ -732,9 +806,9 @@ def get_teams_from_match_data(
     
     # Final verification
     if len(winning_team) != 5:
-        print(f"❌ ERROR: Winning team still has {len(winning_team)} players after balancing!")
+        print(f"[ERROR] Winning team still has {len(winning_team)} players after balancing!")
     if len(losing_team) != 5:
-        print(f"❌ ERROR: Losing team still has {len(losing_team)} players after balancing!")
+        print(f"[ERROR] Losing team still has {len(losing_team)} players after balancing!")
     
     # Verify no duplicates remain
     final_winning_names = {p["name"].lower() for p in winning_team}
@@ -742,8 +816,8 @@ def get_teams_from_match_data(
     final_duplicates = final_winning_names & final_losing_names
     
     if final_duplicates:
-        print(f"❌ ERROR: Duplicate players still exist after balancing: {final_duplicates}")
+        print(f"[ERROR] Duplicate players still exist after balancing: {final_duplicates}")
     else:
-        print(f"✅ Team balancing complete: {len(winning_team)} vs {len(losing_team)} players")
+        print(f"[OK] Team balancing complete: {len(winning_team)} vs {len(losing_team)} players")
 
     return winning_team, losing_team, winners_were_ct
