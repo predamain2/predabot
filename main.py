@@ -2407,7 +2407,24 @@ async def on_voice_state_update(member, before, after):
             left_text_ch = guild.get_channel(left_text_channel_id)
             if left_text_ch:
                 try:
-                    # Only update waiting embed if not in active session
+                    chan_id = left_text_ch.id
+                    # If there was an active picking session in the lobby they left, treat this as a leave
+                    if active_picks.get(chan_id):
+                        await cancel_session_and_reset(chan_id, reason=f"{member.display_name} left during an active session (moved to another lobby). Lobby reset.", leaver_id=member.id)
+                        return
+                    # If there was an active map ban, also reset
+                    map_cog = bot.get_cog('MapBan')
+                    if map_cog and chan_id in getattr(map_cog, 'active', {}):
+                        st = map_cog.active[chan_id]
+                        if len([m for m in st.get("maps", []) if m not in st.get("banned", [])]) > 1:
+                            await cancel_session_and_reset(chan_id, reason=f"{member.display_name} left during map ban (moved to another lobby). Lobby reset.", leaver_id=member.id)
+                            try:
+                                del map_cog.active[chan_id]
+                            except Exception:
+                                pass
+                            return
+
+                    # Otherwise, just update the waiting embed if no active session
                     status = lobby_status.get(left_text_ch.id, {})
                     current_state = status.get("state", "")
                     if current_state not in {"picking", "mapban"}:
