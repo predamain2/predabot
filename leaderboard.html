@@ -203,58 +203,23 @@
             font-size: 2rem;
             font-weight: 800;
             color: #ffffff;
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-        }
-
-        .rank-number {
-            min-width: 50px;
-        }
-
-        .rank-badge {
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.25rem;
-            font-weight: 800;
-            border: 3px solid;
+            text-align: center;
         }
 
         /* Top 3 Ranks */
-        .rank-gold .rank-number {
+        .rank-gold .rank {
             color: #fbbf24;
             font-size: 2.5rem;
         }
 
-        .rank-gold .rank-badge {
-            background: linear-gradient(135deg, #fbbf24, #f59e0b);
-            border-color: #d97706;
-            color: #000000;
-        }
-
-        .rank-silver .rank-number {
+        .rank-silver .rank {
             color: #d1d5db;
             font-size: 2.5rem;
         }
 
-        .rank-silver .rank-badge {
-            background: linear-gradient(135deg, #d1d5db, #9ca3af);
-            border-color: #6b7280;
-            color: #000000;
-        }
-
-        .rank-bronze .rank-number {
+        .rank-bronze .rank {
             color: #f97316;
             font-size: 2.5rem;
-        }
-
-        .rank-bronze .rank-badge {
-            background: linear-gradient(135deg, #f97316, #ea580c);
-            border-color: #c2410c;
-            color: #000000;
         }
 
         /* Player Name */
@@ -332,11 +297,6 @@
             background: linear-gradient(180deg, #f97316, #ea580c) !important;
             width: 6px;
             opacity: 1;
-        }
-
-        /* Medal Icons */
-        .medal {
-            font-size: 1.5rem;
         }
 
         /* Empty State */
@@ -431,16 +391,7 @@
 
         {% for player in players %}
         <div class="player-row {% if player.rank == 1 %}rank-gold{% elif player.rank == 2 %}rank-silver{% elif player.rank == 3 %}rank-bronze{% endif %}">
-            <div class="rank">
-                <span class="rank-number">{{ player.rank }}</span>
-                {% if player.rank == 1 %}
-                <div class="rank-badge">🥇</div>
-                {% elif player.rank == 2 %}
-                <div class="rank-badge">🥈</div>
-                {% elif player.rank == 3 %}
-                <div class="rank-badge">🥉</div>
-                {% endif %}
-            </div>
+            <div class="rank">{{ player.rank }}</div>
             <div class="player-name">{{ player.nick }}</div>
             <div class="stat">
                 <div class="stat-box">{{ player.winrate }}%</div>
