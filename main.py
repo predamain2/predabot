@@ -1192,37 +1192,64 @@ async def announce_teams_final(channel: discord.TextChannel, match_id, chosen_ma
     # Render HTML to image
     image_file = 'temp_match.png'
     await render_html_to_image(match_data, image_file, 'match_template.html')
-    
-    # Create the Discord attachment
-    file = discord.File(image_file)
-    
+
+    img_path = pathlib.Path(image_file)
+
     # Create embed with match title, template image, and host button
     embed = discord.Embed(
         title=f"Match #{match_id}",
         description="Click the button below to get host information",
         color=discord.Color.red()
     )
-    
-    # Set the template image as the embed image
-    embed.set_image(url=f"attachment://{image_file}")
-    
+
     # Create the host profile button view
     view = HostInfoView(host_mention, host_name, host_id)
-    
+
     # Reset lobby status to allow waiting message to appear after match
     lobby_status[channel.id] = {"state": "waiting", "message_id": None}
-    
+
+    # If the image file was not created, warn and send the embed without attachment
+    if not img_path.exists():
+        print(f"[announce_teams_final] ERROR: expected image not found: {img_path}")
+        try:
+            await channel.send("⚠️ Could not generate match image; proceeding without image.")
+        except Exception:
+            pass
+
+        # Send embed without image
+        try:
+            msg = await channel.send(embed=embed, view=view)
+            return msg
+        except Exception as e:
+            print(f"Failed to send match announcement without image: {e}")
+            return None
+
+    # Create the Discord attachment only if file exists
+    file = discord.File(str(img_path))
+    # Set the template image as the embed image
+    embed.set_image(url=f"attachment://{image_file}")
+
     # Send new message instead of editing existing one to ensure proper embed display
     print("Debug - Sending match announcement message")
-    msg = await channel.send(embed=embed, file=file, view=view)
-    print("Debug - Match announcement sent successfully")
+    try:
+        msg = await channel.send(embed=embed, file=file, view=view)
+        print("Debug - Match announcement sent successfully")
+    except Exception as e:
+        print(f"Failed to send match announcement with image: {e}")
+        # Try to send without image as a fallback
+        try:
+            msg = await channel.send(embed=embed, view=view)
+        except Exception as e2:
+            print(f"Fallback send also failed: {e2}")
+            msg = None
 
     # Clean up the temporary files
     try:
-        os.remove(image_file)
+        if img_path.exists():
+            os.remove(img_path)
     except Exception as e:
         print(f"Warning: Could not remove temp files: {e}")
-    
+
     return msg
 
 # ---------- Start picking stage ----------
