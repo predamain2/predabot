@@ -357,12 +357,40 @@ async def render_html_to_image(match_data, output_path, html_template='scoreboar
         browser = await p.chromium.launch()
         page = await browser.new_page()
         await page.set_viewport_size({'width': 1400, 'height': 900})
-        await page.goto('file://' + os.path.abspath(tmp_html))
-        
-        # Wait longer and ensure the page is fully loaded
+
+        # Attach handlers to capture console messages and network failures so we can diagnose 404s
+        try:
+            page.on("console", lambda msg: print(f"[Playwright Console] {msg.type}: {msg.text}"))
+        except Exception:
+            pass
+        try:
+            page.on("requestfailed", lambda req: print(f"[Playwright RequestFailed] {req.url} => {getattr(req, 'failure', None)}"))
+        except Exception:
+            pass
+        try:
+            def _on_response(resp):
+                try:
+                    status = resp.status
+                    if status >= 400:
+                        print(f"[Playwright Response] {resp.url} => status {status}")
+                except Exception:
+                    pass
+            page.on("response", _on_response)
+        except Exception:
+            pass
+
+        # Use pathlib.Path.as_uri() to get a correct file:// URI on all platforms (Windows needs file:///C:/...)
+        file_uri = pathlib.Path(tmp_html).resolve().as_uri()
+        await page.goto(file_uri)
+
+        # Wait a moment and ensure the page is fully loaded
         await asyncio.sleep(1)
-        await page.wait_for_load_state('networkidle')
-        
+        try:
+            await page.wait_for_load_state('networkidle')
+        except Exception:
+            # networkidle sometimes times out for pages that load slowly; continue
+            pass
+
         # Take the screenshot
         await page.screenshot(path=output_path, full_page=True)
         await browser.close()
