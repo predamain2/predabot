@@ -368,11 +368,52 @@ async def render_html_to_image(match_data, output_path, html_template='scoreboar
         except Exception:
             pass
         try:
-            def _on_response(resp):
+            # Route all requests so we can log them and optionally block problematic external calls
+            async def _route_handler(route, request):
+                url = request.url
+                # Log the request URL
+                try:
+                    print(f"[Playwright Request] {url}")
+                except Exception:
+                    pass
+
+                # If a request targets GitHub REST/docs, abort it and log a special message
+                if "api.github.com" in url or "docs.github.com" in url or "raw.githubusercontent.com" in url:
+                    print(f"[Playwright Request] Aborting GitHub-related request: {url}")
+                    try:
+                        await route.abort()
+                    except Exception:
+                        try:
+                            await route.continue_()
+                        except Exception:
+                            pass
+                    return
+
+                # Allow other requests
+                try:
+                    await route.continue_()
+                except Exception:
+                    try:
+                        await route.abort()
+                    except Exception:
+                        pass
+
+            await page.route("**/*", _route_handler)
+        except Exception:
+            pass
+        try:
+            async def _on_response(resp):
                 try:
                     status = resp.status
                     if status >= 400:
-                        print(f"[Playwright Response] {resp.url} => status {status}")
+                        # Attempt to read a short snippet of the response body for diagnostics
+                        snippet = ""
+                        try:
+                            text = await resp.text()
+                            snippet = text[:2000].replace('\n', ' ') if text else ""
+                        except Exception:
+                            snippet = "<could not read response body>"
+                        print(f"[Playwright Response] {resp.url} => status {status} | body_snippet: {snippet}")
                 except Exception:
                     pass
             page.on("response", _on_response)
