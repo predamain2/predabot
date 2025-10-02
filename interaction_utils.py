@@ -88,7 +88,12 @@ class InteractionSafety:
             return True
             
         except discord.errors.NotFound:
-            print(f"Message {message.id} not found for editing")
+            # Message was likely deleted or inaccessible
+            try:
+                mid = getattr(message, 'id', '<unknown>')
+            except Exception:
+                mid = '<unknown>'
+            print(f"Message {mid} not found for editing (deleted or no access)")
             return False
         except discord.errors.Forbidden:
             print(f"No permission to edit message {message.id}")
@@ -149,13 +154,17 @@ class SafeView(discord.ui.View):
                 # Disable all components
                 for item in self.children:
                     item.disabled = True
-                
-                # Try to edit the message to show it's timed out
-                await InteractionSafety.safe_edit_message(
-                    self._message, 
-                    view=self,
-                    content="*This interaction has timed out.*"
-                )
+
+                # If the message object seems stale or deleted, safe_edit_message will handle NotFound
+                try:
+                    await InteractionSafety.safe_edit_message(
+                        self._message,
+                        view=self,
+                        content="*This interaction has timed out.*"
+                    )
+                except Exception as e:
+                    # Ensure the timeout handler doesn't crash if editing fails unexpectedly
+                    print(f"SafeView: failed to edit timed-out message: {e}")
         except Exception as e:
             print(f"Error handling view timeout: {e}")
         

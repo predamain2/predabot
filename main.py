@@ -272,6 +272,11 @@ from playwright.async_api import async_playwright
 async def render_html_to_image(match_data, output_path, html_template='scoreboard.html'):
     """Render templates/scoreboard.html (or scoreboard.html in project root) with match_data and save a PNG using Playwright."""
     print("Rendering scoreboard with data:", json.dumps(match_data, indent=2))
+    # Ensure abs_output exists even if later code raises; prevents UnboundLocalError
+    try:
+        abs_output = pathlib.Path(output_path).resolve()
+    except Exception:
+        abs_output = pathlib.Path(str(output_path))
     
     # Process each player's rating
     for team in ['ct_team', 't_team']:
