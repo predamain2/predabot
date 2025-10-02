@@ -864,7 +864,23 @@ def build_roster_embed(st):
     pick_turn = st.get('pick_turn')
     pick_mention = getattr(pick_turn, "mention", f"<@{id_of(pick_turn)}>")
     match_id = st.get('match_id', '—')
-    e.description = f"Match ID: `{match_id}`\nNext to pick: {pick_mention}"
+
+    # Determine which team the pick_turn belongs to for clarity
+    try:
+        pick_id = str(id_of(pick_turn))
+    except Exception:
+        pick_id = str(getattr(pick_turn, 'id', pick_turn))
+
+    team_label = "Unknown"
+    try:
+        if any(str(id_of(m)) == pick_id for m in st.get('team1', [])):
+            team_label = "Team 1 (CT)"
+        elif any(str(id_of(m)) == pick_id for m in st.get('team2', [])):
+            team_label = "Team 2 (T)"
+    except Exception:
+        team_label = "Unknown"
+
+    e.description = f"Match ID: `{match_id}`\nNext to pick: {pick_mention} — {team_label}"
     
     # Format team lists with custom level emojis
     def format_team_list(team):
