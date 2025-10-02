@@ -450,6 +450,7 @@ async def render_html_to_image(match_data, output_path, html_template='scoreboar
             await browser.close()
         
     print(f"Generated scoreboard image: {output_path}")
+    return output_path
 
 tracemalloc.start()
 
@@ -2030,6 +2031,10 @@ async def on_message(message: discord.Message):
                 inline=False
             )
             
+            # Ensure the generated PNG exists before creating the discord.File
+            import os
+            if not os.path.exists(output_file):
+                raise FileNotFoundError(f"Expected scoreboard image not found: {output_file}")
             # Create file object for the scoreboard
             file = discord.File(output_file)
             
@@ -2052,9 +2057,13 @@ async def on_message(message: discord.Message):
                 pass
                 
         except Exception as e:
-            error_msg = f"⚠️ Failed to send match results to {dest.mention}: {str(e)}"
-            print(error_msg)  # Log the error
-            await InteractionSafety.safe_edit_message(loading_msg, embed=discord.Embed(title="Error", description=error_msg, color=discord.Color.red()))
+            error_msg = f"⚠️ Failed to send match results to {dest.mention if dest else channel_id}: {str(e)}"
+            print(error_msg)
+            try:
+                await InteractionSafety.safe_edit_message(loading_msg, embed=discord.Embed(title="Error", description=error_msg, color=discord.Color.red()))
+            except Exception as ee:
+                # Could be MessageNotFound or NotFound - log and continue
+                print(f"Also failed to edit loading message: {ee}")
 
 # =========================================================
 #                       EVENTS
