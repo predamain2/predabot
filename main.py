@@ -445,12 +445,31 @@ async def render_html_to_image(match_data, output_path, html_template='scoreboar
                 # networkidle sometimes times out for pages that load slowly; continue
                 pass
 
-            # Take the screenshot
-            await page.screenshot(path=output_path, full_page=True)
+            # Ensure we use an absolute path for the screenshot so it's unambiguous
+            abs_output = pathlib.Path(output_path).resolve()
+            print(f"[Playwright] Screenshot target resolved to: {abs_output}")
+            # Take the screenshot to the absolute path
+            await page.screenshot(path=str(abs_output), full_page=True)
             await browser.close()
-        
+
+            # After closing browser, log whether the file exists and its size
+            try:
+                import os as _os
+                if abs_output.exists():
+                    size = abs_output.stat().st_size
+                    print(f"[Playwright] Screenshot saved: {abs_output} ({size} bytes)")
+                else:
+                    print(f"[Playwright] Screenshot NOT found at expected path: {abs_output}")
+                    print(f"[Playwright] Current working dir: {_os.getcwd()}")
+                    try:
+                        print(f"[Playwright] Directory listing: {_os.listdir(str(abs_output.parent))}")
+                    except Exception as _e:
+                        print(f"[Playwright] Could not list directory: {_e}")
+            except Exception:
+                pass
+
     print(f"Generated scoreboard image: {output_path}")
-    return output_path
+    return str(abs_output)
 
 tracemalloc.start()
 
@@ -1964,9 +1983,9 @@ async def on_message(message: discord.Message):
                 match_data_for_html['ct_team'] = losing_team
                 match_data_for_html['t_team'] = winning_team
             
-            # Generate scoreboard image
+            # Generate scoreboard image (render_html_to_image now returns the absolute path)
             output_file = f"scoreboard_{match_id}.png"
-            await render_html_to_image(match_data_for_html, output_file)
+            output_abs_path = await render_html_to_image(match_data_for_html, output_file)
             
             # Create the MVP string with kills
             mvp_string = f"{mvp_player} ({max_kills} kills) 🏆" if mvp_player else "None"
@@ -2033,10 +2052,45 @@ async def on_message(message: discord.Message):
             
             # Ensure the generated PNG exists before creating the discord.File
             import os
-            if not os.path.exists(output_file):
-                raise FileNotFoundError(f"Expected scoreboard image not found: {output_file}")
+            # Prefer the absolute path returned by the renderer if available
+            final_path = output_abs_path if 'output_abs_path' in locals() and output_abs_path else output_file
+
+            # If the expected path doesn't exist, try a few fallbacks:
+            if not os.path.exists(final_path):
+                print(f"Expected scoreboard image not found at {final_path}. Attempting fallback search...")
+                # 1) Check the relative output_file path in cwd
+                rel_candidate = os.path.join(os.getcwd(), output_file)
+                if os.path.exists(rel_candidate):
+                    final_path = rel_candidate
+                    print(f"Found scoreboard image at relative path: {final_path}")
+                else:
+                    # 2) Recursive glob search for scoreboard_<match_id>*.png in workspace
+                    try:
+                        import glob
+                        pattern = f"**/{os.path.basename(output_file)}"
+                        matches = glob.glob(pattern, recursive=True)
+                        if matches:
+                            # Choose the most recently modified match
+                            matches.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+                            final_path = matches[0]
+                            print(f"Found scoreboard image via glob: {final_path}")
+                        else:
+                            # Try more general pattern
+                            pattern2 = f"**/scoreboard_{match_id}*.png"
+                            matches2 = glob.glob(pattern2, recursive=True)
+                            if matches2:
+                                matches2.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+                                final_path = matches2[0]
+                                print(f"Found scoreboard image via broader glob: {final_path}")
+                            else:
+                                final_path = None
+                    except Exception as _e:
+                        print(f"Error during fallback search: {_e}")
+
+            if not final_path or not os.path.exists(final_path):
+                raise FileNotFoundError(f"Expected scoreboard image not found after fallbacks. Tried: {output_abs_path}, {output_file}")
             # Create file object for the scoreboard
-            file = discord.File(output_file)
+            file = discord.File(final_path)
             
             # Different footer for staff channel
             if channel_id == staff_results_id:
