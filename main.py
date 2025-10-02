@@ -346,12 +346,17 @@ async def render_html_to_image(match_data, output_path, html_template='scoreboar
     template = env.from_string(template_content)
     html = template.render(match_data=match_data)
     
+    # Strip common external resources (Google Fonts, Tailwind CDN) to avoid network calls during headless rendering
+    safe_html = re.sub(r"<link[^>]+fonts.googleapis.com[^>]*>", "", html, flags=re.IGNORECASE)
+    safe_html = re.sub(r"<link[^>]+fonts.gstatic.com[^>]*>", "", safe_html, flags=re.IGNORECASE)
+    safe_html = re.sub(r"<script[^>]+cdn.tailwindcss.com[^>]*></script>", "", safe_html, flags=re.IGNORECASE)
+
     # Save the rendered HTML for debugging
     tmp_html = 'temp_scoreboard.html'
     with open(tmp_html, 'w', encoding='utf-8') as f:
-        f.write(html)
-        
-    print(f"Saved rendered HTML to {tmp_html}")
+        f.write(safe_html)
+
+    print(f"Saved rendered HTML to {tmp_html} (external fonts/CSS stripped)")
     
     async with async_playwright() as p:
         browser = await p.chromium.launch()
@@ -371,25 +376,31 @@ async def render_html_to_image(match_data, output_path, html_template='scoreboar
             # Route all requests so we can log them and optionally block problematic external calls
             async def _route_handler(route, request):
                 url = request.url
-                # Log the request URL
+                method = getattr(request, 'method', 'GET')
+                resource_type = getattr(request, 'resource_type', None)
+                # Log the request URL and metadata
                 try:
-                    print(f"[Playwright Request] {url}")
+                    print(f"[Playwright Request] {method} {url} (resource_type={resource_type})")
                 except Exception:
                     pass
 
-                # If a request targets GitHub REST/docs, abort it and log a special message
-                if "api.github.com" in url or "docs.github.com" in url or "raw.githubusercontent.com" in url:
-                    print(f"[Playwright Request] Aborting GitHub-related request: {url}")
-                    try:
-                        await route.abort()
-                    except Exception:
+                # If the URL contains any GitHub-related host/path, abort it and log a special message
+                try:
+                    if 'github' in url.lower():
+                        print(f"[Playwright Request] Aborting GitHub-related request (matched 'github'): {url}")
                         try:
-                            await route.continue_()
+                            await route.abort()
                         except Exception:
-                            pass
-                    return
+                            try:
+                                await route.continue_()
+                            except Exception:
+                                pass
+                        return
+                except Exception:
+                    # Fall back to continuing the route if something goes wrong while matching
+                    pass
 
-                # Allow other requests
+                # Allow other requests to continue
                 try:
                     await route.continue_()
                 except Exception:
@@ -405,36 +416,38 @@ async def render_html_to_image(match_data, output_path, html_template='scoreboar
             async def _on_response(resp):
                 try:
                     status = resp.status
-                    if status >= 400:
-                        # Attempt to read a short snippet of the response body for diagnostics
+                    url = resp.url
+                    # Log non-OK statuses and provide a short snippet when possible
+                    if status >= 300:
                         snippet = ""
                         try:
                             text = await resp.text()
                             snippet = text[:2000].replace('\n', ' ') if text else ""
                         except Exception:
                             snippet = "<could not read response body>"
-                        print(f"[Playwright Response] {resp.url} => status {status} | body_snippet: {snippet}")
+                        print(f"[Playwright Response] {status} {url} | body_snippet: {snippet}")
                 except Exception:
                     pass
             page.on("response", _on_response)
         except Exception:
             pass
 
-        # Use pathlib.Path.as_uri() to get a correct file:// URI on all platforms (Windows needs file:///C:/...)
-        file_uri = pathlib.Path(tmp_html).resolve().as_uri()
-        await page.goto(file_uri)
+            # Use pathlib.Path.as_uri() to get a correct file:// URI on all platforms (Windows needs file:///C:/...)
+            file_uri = pathlib.Path(tmp_html).resolve().as_uri()
+            print(f"[Playwright] Navigating to file URI: {file_uri}")
+            await page.goto(file_uri)
 
-        # Wait a moment and ensure the page is fully loaded
-        await asyncio.sleep(1)
-        try:
-            await page.wait_for_load_state('networkidle')
-        except Exception:
-            # networkidle sometimes times out for pages that load slowly; continue
-            pass
+            # Wait a moment and ensure the page is fully loaded
+            await asyncio.sleep(1)
+            try:
+                await page.wait_for_load_state('networkidle')
+            except Exception:
+                # networkidle sometimes times out for pages that load slowly; continue
+                pass
 
-        # Take the screenshot
-        await page.screenshot(path=output_path, full_page=True)
-        await browser.close()
+            # Take the screenshot
+            await page.screenshot(path=output_path, full_page=True)
+            await browser.close()
         
     print(f"Generated scoreboard image: {output_path}")
 
