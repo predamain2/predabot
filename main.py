@@ -716,7 +716,26 @@ async def handle_pick_select(interaction: discord.Interaction, channel_id: int, 
             await InteractionSafety.safe_respond(interaction, "No picker is set.", ephemeral=True)
             return
 
-        if str(getattr(interaction.user, "id", interaction.user)) != str(getattr(current_picker, "id", current_picker)):
+        # Use id_of helper for a stable integer id comparison (handles Member, FakeMember, int, str)
+        try:
+            user_id = id_of(interaction.user)
+        except Exception:
+            user_id = str(getattr(interaction.user, "id", interaction.user))
+
+        try:
+            picker_id = id_of(current_picker)
+        except Exception:
+            picker_id = str(getattr(current_picker, "id", current_picker))
+
+        if str(user_id) != str(picker_id):
+            # Detailed debug logging to diagnose incorrect turn rejections
+            try:
+                print(f"Pick denied: user attempted pick by user_id={user_id} (name={getattr(interaction.user, 'display_name', None)}) ")
+                print(f"Current picker state: picker={current_picker} picker_type={type(current_picker)} picker_id={picker_id}")
+                print(f"Session state keys: captains=({st.get('captain_ct')},{st.get('captain_t')}), pick_turn={st.get('pick_turn')}")
+            except Exception as e:
+                print(f"Error logging pick denial details: {e}")
+
             await InteractionSafety.safe_respond(interaction, "It's not your turn to pick.", ephemeral=True)
             return
 
