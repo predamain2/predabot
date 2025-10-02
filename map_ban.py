@@ -35,6 +35,7 @@ class MapBan(commands.Cog):
         state = {
             "maps": maps,
             "banned": set(),
+            "ban_history": [],  # Track who banned what: [{"map": "MapName", "player": "PlayerName", "team": "CT/T"}]
             "turn": int(turn),
             "captain_ct": captains[0],
             "captain_t": captains[1],
@@ -79,13 +80,23 @@ class MapBan(commands.Cog):
         embed = discord.Embed(
             title="🗺 Map Ban Phase",
             description=f"Next to ban: {next_cap_mention}",
-            color=discord.Color.orange()
+            color=discord.Color.red()
         )
         embed.add_field(
             name="Maps",
             value="\n".join([f"~~{m}~~" if m in st['banned'] else m for m in st['maps']]),
             inline=False
         )
+        
+        # Add current ban info (only the latest ban)
+        if st["ban_history"]:
+            latest_ban = st["ban_history"][-1]  # Get the most recent ban
+            embed.add_field(
+                name="Latest Ban",
+                value=f"**{latest_ban['map']}** banned by {latest_ban['player']} ({latest_ban['team']})",
+                inline=False
+            )
+        
         embed.set_footer(text=f"Maps remaining: {len(remaining)}")
         return embed
 
@@ -120,6 +131,32 @@ class MapBan(commands.Cog):
 
         st["banned"].add(map_name)
         remaining = [m for m in st["maps"] if m not in st["banned"]]
+
+        # Record who banned this map
+        try:
+            # Get player name from player data
+            player_name = "Unknown Player"
+            try:
+                import main
+                player_data = main.player_data.get(str(interaction.user.id), {})
+                player_name = player_data.get('nick', interaction.user.display_name)
+            except Exception:
+                player_name = interaction.user.display_name
+            
+            # Determine which team the player is on
+            current_turn_id = int(st['turn'])
+            ct_id = int(getattr(st['captain_ct'], 'id', st['captain_ct']))
+            t_id = int(getattr(st['captain_t'], 'id', st['captain_t']))
+            team = "CT" if current_turn_id == ct_id else "T"
+            
+            # Add to ban history
+            st["ban_history"].append({
+                "map": map_name,
+                "player": player_name,
+                "team": team
+            })
+        except Exception as e:
+            print(f"Error recording ban history: {e}")
 
         # SWITCH TURN FIRST so the embed update shows the correct next captain immediately
         try:
@@ -415,20 +452,46 @@ class MapBan(commands.Cog):
             except Exception:
                 pass
 
-        # After DMs are sent, kick all players from the voice channel using config.LOBBY_VOICE_CHANNEL_ID
+        # After DMs are sent, kick all players from the appropriate lobby voice channel
         try:
             guild = self.bot.get_guild(config.GUILD_ID)
-            voice_channel = guild.get_channel(config.LOBBY_VOICE_CHANNEL_ID) if guild else None
-            if voice_channel and hasattr(voice_channel, 'members'):
-                for member in list(voice_channel.members):
-                    member_id = int(getattr(member, "id", member))
-                    if member_id in sent_uids:
-                        try:
-                            await member.move_to(None)
-                        except Exception:
-                            pass
+            if guild:
+                # Determine which lobby voice channel to use based on the text channel
+                voice_channel = None
+                if channel_id == config.LOBBY_TEXT_CHANNEL_ID:
+                    voice_channel = guild.get_channel(config.LOBBY_VOICE_CHANNEL_ID)
+                elif channel_id == config.LOBBY2_TEXT_CHANNEL_ID:
+                    voice_channel = guild.get_channel(config.LOBBY2_VOICE_CHANNEL_ID)
+                
+                if voice_channel and hasattr(voice_channel, 'members'):
+                    for member in list(voice_channel.members):
+                        member_id = int(getattr(member, "id", member))
+                        if member_id in sent_uids:
+                            try:
+                                await member.move_to(None)
+                            except Exception:
+                                pass
         except Exception:
             pass
+
+    async def force_cancel(self, channel_id):
+        """Force cancel map ban session and clean up message"""
+        if channel_id in self.active:
+            st = self.active[channel_id]
+            # Cancel timeout task
+            if st.get("timeout_task"):
+                try:
+                    st["timeout_task"].cancel()
+                except Exception:
+                    pass
+            # Delete the map ban message
+            if st.get("message"):
+                try:
+                    await st["message"].delete()
+                except Exception:
+                    pass
+            # Remove from active sessions
+            del self.active[channel_id]
 
 # async setup for modern extension loading
 async def setup(bot):
