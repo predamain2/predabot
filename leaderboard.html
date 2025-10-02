@@ -3,115 +3,155 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Arena FACEIT Leaderboard</title>
+    <title>Major FACEIT Leaderboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Orbitron:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700;800&family=Barlow:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
-        /* Main styling */
-        body {
+        * {
+            box-sizing: border-box;
             margin: 0;
             padding: 0;
-            background: linear-gradient(135deg, #0f0f0f 0%, #1a1a1a 50%, #0f0f0f 100%);
+        }
+
+        body {
+            font-family: 'Barlow', sans-serif;
+            background: 
+                linear-gradient(135deg, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.95) 100%),
+                url('mf_banner.png') center/cover no-repeat fixed;
+            background-attachment: fixed;
             color: white;
-            font-family: 'Inter', sans-serif;
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 1rem;
+            padding: 2rem 1rem;
         }
 
-        /* Container styling */
         .leaderboard-container {
             width: 100%;
-            max-width: 1200px;
-            background: linear-gradient(145deg, #1a1a1a 0%, #2a2a2a 100%);
-            border: 2px solid #DC143C;
-            border-radius: 16px;
-            box-shadow: 
-                0 20px 40px rgba(0,0,0,0.8),
-                0 0 80px rgba(220, 20, 60, 0.2),
-                inset 0 1px 0 rgba(255,255,255,0.1);
-            position: relative;
+            max-width: 1400px;
+            background: #0a0a0a;
             overflow: hidden;
+            position: relative;
         }
 
+        /* Geometric Background Pattern */
         .leaderboard-container::before {
             content: '';
             position: absolute;
             top: 0;
             left: 0;
             right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, #DC143C, #FF1744, #DC143C);
-            animation: pulse 2s ease-in-out infinite;
+            bottom: 0;
+            background: 
+                linear-gradient(135deg, transparent 48%, rgba(255, 107, 0, 0.03) 48%, rgba(255, 107, 0, 0.03) 52%, transparent 52%),
+                linear-gradient(45deg, transparent 48%, rgba(59, 130, 246, 0.03) 48%, rgba(59, 130, 246, 0.03) 52%, transparent 52%);
+            background-size: 100px 100px;
+            pointer-events: none;
+            opacity: 0.5;
         }
 
-        @keyframes pulse {
-            0%, 100% { opacity: 0.8; }
-            50% { opacity: 1; }
-        }
-
-        /* Header styling */
+        /* Header */
         .header {
+            background: linear-gradient(180deg, #111111 0%, #0a0a0a 100%);
+            padding: 2rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 1.5rem 2rem;
-            background: linear-gradient(135deg, #DC143C 0%, #FF1744 100%);
+            border-bottom: 3px solid #ff6b00;
             position: relative;
-            overflow: hidden;
+            z-index: 3;
         }
 
-        .header h1 {
-            margin: 0;
-            font-family: 'Orbitron', monospace;
-            font-size: 2.5rem;
-            font-weight: 900;
-            letter-spacing: 3px;
-            text-transform: uppercase;
-            text-shadow: 0 4px 8px rgba(0,0,0,0.5);
-            color: #ffffff;
-        }
-
-
-        .arena-logo {
+        .header::before {
+            content: '';
             position: absolute;
-            top: 1rem;
-            right: 1rem;
-            width: 60px;
-            height: 60px;
-            background: url('af_logo.png') center/contain no-repeat;
-            opacity: 0.9;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 100%;
+            background: linear-gradient(90deg, 
+                rgba(59, 130, 246, 0.1) 0%, 
+                transparent 30%, 
+                transparent 70%, 
+                rgba(255, 107, 0, 0.1) 100%);
+            pointer-events: none;
+        }
+
+        .header-content {
+            position: relative;
             z-index: 2;
         }
 
-        .arena-branding {
-            position: absolute;
-            bottom: 0.5rem;
-            right: 1rem;
-            font-family: 'Orbitron', monospace;
-            font-size: 0.9rem;
-            font-weight: 600;
-            color: rgba(255,255,255,0.8);
+        .header h1 {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 3.5rem;
+            font-weight: 800;
+            letter-spacing: 8px;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            color: #ffffff;
+            line-height: 1;
+            margin-bottom: 0.5rem;
         }
 
-        /* Column headers */
+        .header-subtitle {
+            font-family: 'Barlow', sans-serif;
+            font-size: 0.875rem;
+            font-weight: 700;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+
+        .branding-box {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            background: rgba(255, 107, 0, 0.1);
+            padding: 1rem 1.5rem;
+            border-left: 4px solid #ff6b00;
+            position: relative;
+            z-index: 2;
+        }
+
+        .powered-by {
+            font-family: 'Barlow', sans-serif;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .major-faceit {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: #ff6b00;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            line-height: 1.2;
+        }
+
+        /* Column Headers */
         .column-headers {
             display: grid;
-            grid-template-columns: 60px 1fr 100px 100px 100px;
-            padding: 0.8rem 1.5rem;
-            background: linear-gradient(135deg, rgba(220, 20, 60, 0.1) 0%, rgba(220, 20, 60, 0.05) 100%);
-            border-bottom: 2px solid rgba(220, 20, 60, 0.3);
-            font-family: 'Orbitron', monospace;
-            font-weight: 600;
+            grid-template-columns: 100px 1fr 140px 140px 140px;
+            padding: 1rem 2rem;
+            background: rgba(255, 255, 255, 0.03);
+            border-bottom: 2px solid rgba(255, 107, 0, 0.3);
+            position: relative;
+            z-index: 2;
+        }
+
+        .column-headers > div {
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 800;
             text-transform: uppercase;
-            font-size: 0.8rem;
+            font-size: 0.875rem;
             letter-spacing: 2px;
-            color: #DC143C;
+            color: #9ca3af;
         }
 
         .column-headers > div:nth-child(3),
@@ -120,115 +160,303 @@
             text-align: center;
         }
 
-        /* Player rows */
+        /* Player Rows */
         .player-row {
             display: grid;
-            grid-template-columns: 60px 1fr 100px 100px 100px;
-            padding: 0.8rem 1.5rem;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
+            grid-template-columns: 100px 1fr 140px 140px 140px;
+            padding: 1.25rem 2rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
             align-items: center;
             transition: all 0.3s ease;
             position: relative;
-            overflow: hidden;
+            z-index: 2;
+            background: linear-gradient(90deg, 
+                rgba(255, 255, 255, 0.01), 
+                rgba(255, 255, 255, 0.005));
         }
 
         .player-row::before {
             content: '';
             position: absolute;
+            left: 0;
             top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(220, 20, 60, 0.1), transparent);
-            transition: left 0.5s ease;
-        }
-
-        .player-row:hover::before {
-            left: 100%;
+            bottom: 0;
+            width: 4px;
+            background: transparent;
+            transition: all 0.3s ease;
         }
 
         .player-row:hover {
-            background: linear-gradient(90deg, rgba(220, 20, 60, 0.05) 0%, rgba(220, 20, 60, 0.02) 100%);
+            background: linear-gradient(90deg, 
+                rgba(255, 107, 0, 0.08), 
+                rgba(255, 107, 0, 0.02));
             transform: translateX(8px);
-            border-left: 3px solid #DC143C;
         }
 
-        /* Player ranking */
+        .player-row:hover::before {
+            background: linear-gradient(180deg, #ff6b00, #cc5500);
+        }
+
+        /* Rank Styling */
         .rank {
-            font-family: 'Orbitron', monospace;
-            font-size: 1.4rem;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 2rem;
             font-weight: 800;
-            color: #DC143C;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
-        }
-
-        /* Player name */
-        .player-name {
-            font-family: 'Inter', sans-serif;
-            font-weight: 600;
-            font-size: 1rem;
             color: #ffffff;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
         }
 
-        /* Stats styling */
+        .rank-number {
+            min-width: 50px;
+        }
+
+        .rank-badge {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+            font-weight: 800;
+            border: 3px solid;
+        }
+
+        /* Top 3 Ranks */
+        .rank-gold .rank-number {
+            color: #fbbf24;
+            font-size: 2.5rem;
+        }
+
+        .rank-gold .rank-badge {
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            border-color: #d97706;
+            color: #000000;
+        }
+
+        .rank-silver .rank-number {
+            color: #d1d5db;
+            font-size: 2.5rem;
+        }
+
+        .rank-silver .rank-badge {
+            background: linear-gradient(135deg, #d1d5db, #9ca3af);
+            border-color: #6b7280;
+            color: #000000;
+        }
+
+        .rank-bronze .rank-number {
+            color: #f97316;
+            font-size: 2.5rem;
+        }
+
+        .rank-bronze .rank-badge {
+            background: linear-gradient(135deg, #f97316, #ea580c);
+            border-color: #c2410c;
+            color: #000000;
+        }
+
+        /* Player Name */
+        .player-name {
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 700;
+            font-size: 1.5rem;
+            color: #ffffff;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        /* Stats */
         .stat {
             text-align: center;
-            font-family: 'Inter', sans-serif;
-            font-weight: 600;
-            font-size: 0.9rem;
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 700;
+            font-size: 1.25rem;
             color: #ffffff;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            position: relative;
         }
 
-        /* Gradient background for rows */
-        .player-row:nth-child(odd) {
-            background: linear-gradient(90deg, rgba(220, 20, 60, 0.02) 0%, rgba(220, 20, 60, 0.01) 100%);
+        .stat-box {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 0.5rem 1rem;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            min-width: 80px;
         }
 
-        /* Special styling for top 3 players */
-        .rank-gold {
-            color: #FFD700 !important;
-            text-shadow: 0 0 15px rgba(255, 215, 0, 0.8);
-            font-size: 1.6rem;
+        .player-row:hover .stat-box {
+            background: rgba(255, 107, 0, 0.15);
+            border-color: rgba(255, 107, 0, 0.3);
         }
 
-        .rank-silver {
-            color: #C0C0C0 !important;
-            text-shadow: 0 0 15px rgba(192, 192, 192, 0.8);
-            font-size: 1.6rem;
+        /* Special styling for top 3 */
+        .rank-gold .player-name {
+            color: #fbbf24;
         }
 
-        .rank-bronze {
-            color: #CD7F32 !important;
-            text-shadow: 0 0 15px rgba(205, 127, 50, 0.8);
-            font-size: 1.6rem;
+        .rank-silver .player-name {
+            color: #d1d5db;
+        }
+
+        .rank-bronze .player-name {
+            color: #f97316;
+        }
+
+        .rank-gold .stat {
+            color: #fbbf24;
+        }
+
+        .rank-silver .stat {
+            color: #d1d5db;
+        }
+
+        .rank-bronze .stat {
+            color: #f97316;
+        }
+
+        /* Accent borders for top 3 */
+        .rank-gold::before {
+            background: linear-gradient(180deg, #fbbf24, #f59e0b) !important;
+            width: 6px;
+            opacity: 1;
+        }
+
+        .rank-silver::before {
+            background: linear-gradient(180deg, #d1d5db, #9ca3af) !important;
+            width: 6px;
+            opacity: 1;
+        }
+
+        .rank-bronze::before {
+            background: linear-gradient(180deg, #f97316, #ea580c) !important;
+            width: 6px;
+            opacity: 1;
+        }
+
+        /* Medal Icons */
+        .medal {
+            font-size: 1.5rem;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: #6b7280;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1.25rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .column-headers,
+            .player-row {
+                grid-template-columns: 80px 1fr 100px 100px 100px;
+                padding: 1rem 1.5rem;
+            }
+
+            .header h1 {
+                font-size: 2.5rem;
+            }
+
+            .player-name {
+                font-size: 1.25rem;
+            }
+
+            .rank {
+                font-size: 1.5rem;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .column-headers,
+            .player-row {
+                grid-template-columns: 60px 1fr 80px 80px 80px;
+                padding: 0.875rem 1rem;
+            }
+
+            .header {
+                flex-direction: column;
+                gap: 1rem;
+                text-align: center;
+            }
+
+            .branding-box {
+                align-items: center;
+            }
+
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .player-name {
+                font-size: 1rem;
+            }
+
+            .stat {
+                font-size: 1rem;
+            }
+
+            .stat-box {
+                min-width: 60px;
+                padding: 0.375rem 0.75rem;
+            }
         }
     </style>
 </head>
 <body>
     <div class="leaderboard-container">
         <div class="header">
-            <h1>LEADERBOARD</h1>
-            <div class="arena-logo"></div>
-            <div class="arena-branding">Arena FACEIT</div>
+            <div class="header-content">
+                <h1>LEADERBOARD</h1>
+                <div class="header-subtitle">Top Players Rankings</div>
+            </div>
+            <div class="branding-box">
+                <div class="powered-by">POWERED BY</div>
+                <div class="major-faceit">MAJOR FACEIT</div>
+            </div>
         </div>
+
         <div class="column-headers">
-            <div>#</div>
+            <div>RANK</div>
             <div>PLAYER</div>
-            <div>W/R</div>
-            <div>K/D</div>
+            <div>WIN RATE</div>
+            <div>K/D RATIO</div>
             <div>POINTS</div>
         </div>
+
         {% for player in players %}
-        <div class="player-row">
-            <div class="rank {% if player.rank == 1 %}rank-gold{% elif player.rank == 2 %}rank-silver{% elif player.rank == 3 %}rank-bronze{% endif %}">{{ player.rank }}</div>
+        <div class="player-row {% if player.rank == 1 %}rank-gold{% elif player.rank == 2 %}rank-silver{% elif player.rank == 3 %}rank-bronze{% endif %}">
+            <div class="rank">
+                <span class="rank-number">{{ player.rank }}</span>
+                {% if player.rank == 1 %}
+                <div class="rank-badge">🥇</div>
+                {% elif player.rank == 2 %}
+                <div class="rank-badge">🥈</div>
+                {% elif player.rank == 3 %}
+                <div class="rank-badge">🥉</div>
+                {% endif %}
+            </div>
             <div class="player-name">{{ player.nick }}</div>
-            <div class="stat">{{ player.winrate }}%</div>
-            <div class="stat">{{ player.kd }}</div>
-            <div class="stat">{{ player.elo }}</div>
+            <div class="stat">
+                <div class="stat-box">{{ player.winrate }}%</div>
+            </div>
+            <div class="stat">
+                <div class="stat-box">{{ player.kd }}</div>
+            </div>
+            <div class="stat">
+                <div class="stat-box">{{ player.elo }}</div>
+            </div>
         </div>
         {% endfor %}
+
+        {% if not players %}
+        <div class="empty-state">No players ranked yet</div>
+        {% endif %}
     </div>
 </body>
 </html>
