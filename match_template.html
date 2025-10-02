@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Arena FACEIT Match</title>
+    <title>Major FACEIT Match</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Orbitron:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700;800&family=Barlow:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         * {
@@ -16,8 +16,8 @@
         }
 
         body {
-            font-family: 'Inter', sans-serif;
-            background: linear-gradient(135deg, #0f0f0f 0%, #1a1a1a 50%, #0f0f0f 100%);
+            font-family: 'Barlow', sans-serif;
+            background: #000000;
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -27,243 +27,320 @@
 
         .arena-container {
             width: 100%;
-            max-width: 1400px;
-            background: linear-gradient(145deg, #1a1a1a 0%, #2a2a2a 100%);
-            border: 2px solid #DC143C;
-            border-radius: 16px;
-            box-shadow: 
-                0 20px 40px rgba(0,0,0,0.8),
-                0 0 80px rgba(220, 20, 60, 0.2),
-                inset 0 1px 0 rgba(255,255,255,0.1);
-            position: relative;
+            max-width: 1600px;
+            background: #0a0a0a;
             overflow: hidden;
+            position: relative;
         }
 
-        .arena-container::before {
+        /* Header */
+        .header {
+            background: linear-gradient(180deg, #111111 0%, #0a0a0a 100%);
+            padding: 1.5rem 2rem;
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items: center;
+            gap: 2rem;
+            border-bottom: 3px solid #ff6b00;
+            position: relative;
+        }
+
+        .header::before {
             content: '';
             position: absolute;
             top: 0;
             left: 0;
             right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, #DC143C, #FF1744, #DC143C);
-            animation: pulse 2s ease-in-out infinite;
+            height: 100%;
+            background: linear-gradient(90deg, 
+                rgba(59, 130, 246, 0.08) 0%, 
+                transparent 30%, 
+                transparent 70%, 
+                rgba(255, 107, 0, 0.08) 100%);
+            pointer-events: none;
         }
 
-        @keyframes pulse {
-            0%, 100% { opacity: 0.8; }
-            50% { opacity: 1; }
-        }
-
-        .header {
-            background: linear-gradient(135deg, #DC143C 0%, #FF1744 100%);
-            padding: 1.5rem 2rem;
+        .header-left,
+        .header-center,
+        .header-right {
             position: relative;
-            overflow: hidden;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
+            z-index: 1;
         }
 
         .header-left {
-            flex: 1;
             text-align: left;
         }
 
         .header-center {
-            flex: 1;
             text-align: center;
-            position: relative;
         }
 
         .header-right {
-            flex: 1;
             text-align: right;
         }
 
-        .map-name {
-            font-family: 'Orbitron', monospace;
-            font-size: 1.8rem;
+        .map-container {
+            display: inline-flex;
+            align-items: center;
+            gap: 1rem;
+            background: rgba(59, 130, 246, 0.1);
+            padding: 0.75rem 1.5rem;
+            border-left: 4px solid #3b82f6;
+        }
+
+        .map-label {
+            font-family: 'Barlow', sans-serif;
+            font-size: 0.7rem;
             font-weight: 700;
-            color: #ffffff;
+            color: #6b7280;
             text-transform: uppercase;
             letter-spacing: 2px;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .map-name {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: #ffffff;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            line-height: 1.2;
         }
 
         .match-title {
-            font-family: 'Orbitron', monospace;
-            font-size: 2.2rem;
-            font-weight: 900;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 3.5rem;
+            font-weight: 800;
             color: #ffffff;
             text-transform: uppercase;
-            letter-spacing: 3px;
-            text-shadow: 0 4px 8px rgba(0,0,0,0.5);
+            letter-spacing: 6px;
+            line-height: 1;
+        }
+
+        .match-info-box {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: flex-end;
+            background: rgba(255, 107, 0, 0.1);
+            padding: 0.75rem 1.5rem;
+            border-right: 4px solid #ff6b00;
+        }
+
+        .match-id-label {
+            font-family: 'Barlow', sans-serif;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 2px;
         }
 
         .match-id {
-            font-family: 'Orbitron', monospace;
-            font-size: 1.6rem;
-            font-weight: 600;
-            color: #ffffff;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: #ff6b00;
             text-transform: uppercase;
             letter-spacing: 2px;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            line-height: 1.2;
         }
 
-        .arena-logo {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 60px;
-            height: 60px;
-            background: url('af_logo.png') center/contain no-repeat;
-            filter: brightness(0) invert(1);
-            opacity: 0.3;
-            z-index: 1;
+        .powered-by {
+            font-family: 'Barlow', sans-serif;
+            font-size: 0.65rem;
+            font-weight: 700;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-top: 0.5rem;
         }
 
-        .arena-branding {
-            position: absolute;
-            bottom: 0.5rem;
-            right: 1rem;
-            font-family: 'Orbitron', monospace;
+        .major-faceit {
+            font-family: 'Rajdhani', sans-serif;
             font-size: 0.9rem;
-            font-weight: 600;
-            color: rgba(255,255,255,0.8);
+            font-weight: 800;
+            color: #ff6b00;
             text-transform: uppercase;
             letter-spacing: 1px;
         }
 
+        /* Teams Container */
         .teams-container {
-            display: flex;
-            min-height: 400px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0;
+            background: #0a0a0a;
+            padding: 2.5rem 2rem;
+            position: relative;
+        }
+
+        .teams-container::before {
+            content: '';
+            position: absolute;
+            top: 5%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 2px;
+            height: 90%;
+            background: linear-gradient(180deg, 
+                transparent 0%,
+                #3b82f6 20%, 
+                #ff6b00 50%, 
+                #3b82f6 80%,
+                transparent 100%);
         }
 
         .team-section {
+            padding: 0 2rem;
+        }
+
+        /* Team Header */
+        .team-header-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .team-badge {
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            border: 3px solid;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1.25rem;
+            font-weight: 800;
+        }
+
+        .team-ct .team-badge {
+            background: #3b82f6;
+            border-color: #2563eb;
+            color: #000000;
+        }
+
+        .team-t .team-badge {
+            background: #ff6b00;
+            border-color: #cc5500;
+            color: #000000;
+        }
+
+        .team-header-content {
             flex: 1;
-            padding: 2rem;
-            position: relative;
-        }
-
-        .team-ct {
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%);
-            border-right: 2px solid rgba(59, 130, 246, 0.3);
-        }
-
-        .team-t {
-            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%);
         }
 
         .team-header {
-            font-family: 'Orbitron', monospace;
-            font-size: 1.6rem;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1.75rem;
             font-weight: 800;
-            margin-bottom: 0.5rem;
             text-transform: uppercase;
             letter-spacing: 2px;
-            text-align: center;
-            padding: 0.8rem;
-            border-radius: 8px;
-            position: relative;
-        }
-
-        .team-ct .team-header {
-            color: #60a5fa;
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(59, 130, 246, 0.1) 100%);
-            border: 1px solid rgba(59, 130, 246, 0.3);
-        }
-
-        .team-t .team-header {
-            color: #f87171;
-            background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%);
-            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #ffffff;
+            line-height: 1.2;
+            margin-bottom: 0.25rem;
         }
 
         .team-subtitle {
-            font-family: 'Inter', sans-serif;
-            font-size: 1rem;
-            font-weight: 500;
-            text-align: center;
-            margin-bottom: 0.5rem;
-            color: rgba(255,255,255,0.7);
+            font-family: 'Barlow', sans-serif;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #6b7280;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 2px;
         }
 
-        .team-ct .team-subtitle {
-            color: #93c5fd;
-        }
-
-        .team-t .team-subtitle {
-            color: #fca5a5;
-        }
-
+        /* Team Stats */
         .team-stats {
-            display: flex;
-            justify-content: space-around;
-            margin-bottom: 1rem;
-            padding: 0.5rem;
-            background: rgba(0,0,0,0.2);
-            border-radius: 6px;
-            border: 1px solid rgba(255,255,255,0.1);
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.02);
+            border-left: 3px solid;
+        }
+
+        .team-ct .team-stats {
+            border-left-color: #3b82f6;
+        }
+
+        .team-t .team-stats {
+            border-left-color: #ff6b00;
         }
 
         .stat-item {
             text-align: center;
-            font-size: 0.8rem;
         }
 
         .stat-label {
-            color: rgba(255,255,255,0.6);
-            font-weight: 500;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 0.7rem;
+            color: #9ca3af;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 1.5px;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
         }
 
         .stat-value {
-            color: #ffffff;
-            font-weight: 700;
-            font-size: 1rem;
-            margin-top: 0.2rem;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 800;
         }
 
         .team-ct .stat-value {
-            color: #60a5fa;
+            color: #3b82f6;
         }
 
         .team-t .stat-value {
-            color: #f87171;
+            color: #ff6b00;
         }
 
+        /* Strength Indicator */
         .strength-indicator {
             display: flex;
-            justify-content: center;
-            margin-bottom: 1rem;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .strength-text {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 0.75rem;
+            color: #9ca3af;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-weight: 700;
+            margin-bottom: 0.75rem;
         }
 
         .strength-bar {
-            width: 100px;
-            height: 8px;
-            background: rgba(0,0,0,0.3);
-            border-radius: 4px;
+            width: 100%;
+            max-width: 300px;
+            height: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 5px;
             overflow: hidden;
-            border: 1px solid rgba(255,255,255,0.2);
+            border: 2px solid rgba(255, 255, 255, 0.1);
         }
 
         .strength-fill {
             height: 100%;
-            border-radius: 4px;
-            transition: width 0.3s ease;
+            transition: width 0.8s ease;
         }
 
         .team-ct .strength-fill {
-            background: linear-gradient(90deg, #60a5fa, #3b82f6);
+            background: linear-gradient(90deg, #3b82f6, #2563eb);
         }
 
         .team-t .strength-fill {
-            background: linear-gradient(90deg, #f87171, #ef4444);
+            background: linear-gradient(90deg, #ff6b00, #cc5500);
         }
 
         .team1-strength {
@@ -274,14 +351,22 @@
             width: var(--team2-strength, 50%);
         }
 
-        .strength-text {
-            font-size: 0.7rem;
-            color: rgba(255,255,255,0.8);
-            margin-top: 0.3rem;
-            text-align: center;
-            font-weight: 600;
+        .strength-percentage {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1rem;
+            font-weight: 800;
+            margin-top: 0.5rem;
         }
 
+        .team-ct .strength-percentage {
+            color: #3b82f6;
+        }
+
+        .team-t .strength-percentage {
+            color: #ff6b00;
+        }
+
+        /* Player List */
         .player-list {
             list-style: none;
             padding: 0;
@@ -291,22 +376,43 @@
         .player-item {
             display: flex;
             align-items: center;
-            padding: 1rem 1.5rem;
-            background: linear-gradient(90deg, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0.2) 100%);
-            border-radius: 10px;
+            background: linear-gradient(90deg, 
+                rgba(255, 255, 255, 0.03), 
+                rgba(255, 255, 255, 0.01));
+            border-left: 3px solid;
+            padding: 1rem 1.25rem;
             margin-bottom: 0.75rem;
             transition: all 0.3s ease;
-            border: 1px solid rgba(255,255,255,0.1);
-            position: relative;
-            overflow: hidden;
+        }
+
+        .team-ct .player-item {
+            border-left-color: rgba(59, 130, 246, 0.4);
+        }
+
+        .team-t .player-item {
+            border-left-color: rgba(255, 107, 0, 0.4);
+        }
+
+        .player-item:hover {
+            background: linear-gradient(90deg, 
+                rgba(255, 255, 255, 0.06), 
+                rgba(255, 255, 255, 0.03));
+            transform: translateX(5px);
+        }
+
+        .team-ct .player-item:hover {
+            border-left-color: #3b82f6;
+        }
+
+        .team-t .player-item:hover {
+            border-left-color: #ff6b00;
         }
 
         .party-indicator {
             width: 4px;
-            height: 20px;
-            background: #DC143C;
-            border-radius: 2px;
-            margin-right: 0.5rem;
+            height: 32px;
+            background: linear-gradient(180deg, #ff6b00, #cc5500);
+            margin-right: 1rem;
             flex-shrink: 0;
         }
 
@@ -314,75 +420,145 @@
             display: flex;
             align-items: center;
             flex: 1;
-        }
-
-        .player-item::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
-            transition: left 0.5s ease;
-        }
-
-        .player-item:hover::before {
-            left: 100%;
-        }
-
-        .player-item:hover {
-            transform: translateX(8px);
-            background: linear-gradient(90deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.3) 100%);
-            border-color: rgba(255,255,255,0.2);
+            gap: 1rem;
         }
 
         .level-icon {
-            width: 32px;
-            height: 32px;
-            margin-right: 1rem;
-            border-radius: 50%;
-            border: 2px solid rgba(255,255,255,0.2);
+            width: 40px;
+            height: 40px;
+            border-radius: 4px;
+            border: 2px solid #2a3038;
             flex-shrink: 0;
+            transition: all 0.3s ease;
+        }
+
+        .team-ct .player-item:hover .level-icon {
+            border-color: #3b82f6;
+        }
+
+        .team-t .player-item:hover .level-icon {
+            border-color: #ff6b00;
         }
 
         .player-name {
-            font-size: 1.4rem;
-            font-weight: 600;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1.25rem;
+            font-weight: 700;
             color: #ffffff;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            letter-spacing: 1px;
+            text-transform: uppercase;
         }
 
         .empty-team {
             text-align: center;
-            padding: 2rem;
-            color: rgba(255,255,255,0.5);
-            font-style: italic;
+            padding: 3rem;
+            color: #4b5563;
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 2px;
         }
 
+        /* Host Info */
         .host-info {
-            background: linear-gradient(135deg, rgba(220, 20, 60, 0.1) 0%, rgba(220, 20, 60, 0.05) 100%);
-            border-top: 2px solid #DC143C;
-            padding: 1.5rem;
-            text-align: center;
+            background: linear-gradient(180deg, #0a0a0a 0%, #111111 100%);
+            border-top: 3px solid #ff6b00;
+            padding: 1.5rem 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            position: relative;
+        }
+
+        .host-info::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 100%;
+            background: linear-gradient(90deg, 
+                rgba(59, 130, 246, 0.08) 0%, 
+                transparent 30%, 
+                transparent 70%, 
+                rgba(255, 107, 0, 0.08) 100%);
+            pointer-events: none;
+        }
+
+        .host-label {
+            font-family: 'Barlow', sans-serif;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            position: relative;
+            z-index: 1;
         }
 
         .host-text {
-            color: #DC143C;
-            font-weight: 600;
-            font-size: 1.1rem;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: #ff6b00;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            position: relative;
+            z-index: 1;
         }
 
         .host-id {
-            font-family: 'Orbitron', monospace;
-            background: rgba(0,0,0,0.3);
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            border: 1px solid #DC143C;
-            display: inline-block;
-            margin-top: 0.5rem;
+            font-family: 'Rajdhani', sans-serif;
+            background: rgba(255, 107, 0, 0.15);
+            padding: 0.5rem 1.25rem;
+            border: 2px solid #ff6b00;
             color: #ffffff;
-            font-weight: 500;
+            font-weight: 700;
+            font-size: 1rem;
+            letter-spacing: 1px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .teams-container {
+                grid-template-columns: 1fr;
+                gap: 3rem;
+            }
+            
+            .teams-container::before {
+                width: 90%;
+                height: 2px;
+                top: 50%;
+                left: 5%;
+                transform: translateY(-50%);
+                background: linear-gradient(90deg, 
+                    transparent 0%,
+                    #3b82f6 20%, 
+                    #ff6b00 50%, 
+                    #3b82f6 80%,
+                    transparent 100%);
+            }
+            
+            .header {
+                grid-template-columns: 1fr;
+                gap: 1.5rem;
+                text-align: center;
+            }
+            
+            .header-left,
+            .header-right {
+                text-align: center;
+                display: flex;
+                justify-content: center;
+            }
+            
+            .match-title {
+                font-size: 2.5rem;
+            }
         }
     </style>
 </head>
@@ -390,23 +566,36 @@
     <div class="arena-container">
         <div class="header">
             <div class="header-left">
-                <div class="map-name">{{ match_data.map_name }}</div>
+                <div class="map-container">
+                    <div>
+                        <div class="map-label">Playing on</div>
+                        <div class="map-name">{{ match_data.map_name }}</div>
+                    </div>
+                </div>
             </div>
             <div class="header-center">
-                <div class="arena-logo"></div>
-                <h1 class="match-title">Match Start</h1>
+                <h1 class="match-title">MATCH START</h1>
             </div>
             <div class="header-right">
-                <div class="match-id">Match #{{ match_data.match_id }}</div>
+                <div class="match-info-box">
+                    <div class="match-id-label">MATCH NUMBER</div>
+                    <div class="match-id">#{{ match_data.match_id }}</div>
+                    <div class="powered-by">POWERED BY</div>
+                    <div class="major-faceit">MAJOR FACEIT</div>
+                </div>
             </div>
-            <div class="arena-branding">Arena FACEIT</div>
         </div>
-        
+
         <div class="teams-container">
             <div class="team-section team-ct">
-                <h2 class="team-header">Team {{ match_data.team1[0].name if match_data.team1 else 'CT' }}</h2>
-                <div class="team-subtitle">Counter Terrorist</div>
-                
+                <div class="team-header-wrapper">
+                    <div class="team-badge">CT</div>
+                    <div class="team-header-content">
+                        <h2 class="team-header">Team {{ match_data.team1[0].name if match_data.team1 else 'CT' }}</h2>
+                        <div class="team-subtitle">Counter-Terrorist Force</div>
+                    </div>
+                </div>
+
                 <div class="team-stats">
                     <div class="stat-item">
                         <div class="stat-label">Avg ELO</div>
@@ -423,12 +612,13 @@
                 </div>
 
                 <div class="strength-indicator">
+                    <div class="strength-text">Team Strength</div>
                     <div class="strength-bar">
                         <div class="strength-fill team1-strength"></div>
                     </div>
+                    <div class="strength-percentage">{{ match_data.team1_stats.strength_percentage if match_data.team1_stats else '50' }}%</div>
                 </div>
-                <div class="strength-text">Team Strength</div>
-                
+
                 <ul class="player-list">
                     {% for player in match_data.team1 %}
                     <li class="player-item">
@@ -442,17 +632,20 @@
                     </li>
                     {% endfor %}
                     {% if not match_data.team1 %}
-                    <li class="empty-team">
-                        <span>No players yet</span>
-                    </li>
+                    <li class="empty-team">Awaiting Players</li>
                     {% endif %}
                 </ul>
             </div>
 
             <div class="team-section team-t">
-                <h2 class="team-header">Team {{ match_data.team2[0].name if match_data.team2 else 'T' }}</h2>
-                <div class="team-subtitle">Terrorist</div>
-                
+                <div class="team-header-wrapper">
+                    <div class="team-badge">T</div>
+                    <div class="team-header-content">
+                        <h2 class="team-header">Team {{ match_data.team2[0].name if match_data.team2 else 'T' }}</h2>
+                        <div class="team-subtitle">Terrorist Force</div>
+                    </div>
+                </div>
+
                 <div class="team-stats">
                     <div class="stat-item">
                         <div class="stat-label">Avg ELO</div>
@@ -469,12 +662,13 @@
                 </div>
 
                 <div class="strength-indicator">
+                    <div class="strength-text">Team Strength</div>
                     <div class="strength-bar">
                         <div class="strength-fill team2-strength"></div>
                     </div>
+                    <div class="strength-percentage">{{ match_data.team2_stats.strength_percentage if match_data.team2_stats else '50' }}%</div>
                 </div>
-                <div class="strength-text">Team Strength</div>
-                
+
                 <ul class="player-list">
                     {% for player in match_data.team2 %}
                     <li class="player-item">
@@ -488,16 +682,15 @@
                     </li>
                     {% endfor %}
                     {% if not match_data.team2 %}
-                    <li class="empty-team">
-                        <span>No players yet</span>
-                    </li>
+                    <li class="empty-team">Awaiting Players</li>
                     {% endif %}
                 </ul>
             </div>
         </div>
 
         <div class="host-info">
-            <div class="host-text">Host: {{ match_data.host_name }}</div>
+            <div class="host-label">Match Host</div>
+            <div class="host-text">{{ match_data.host_name }}</div>
             {% if match_data.host_id %}
             <div class="host-id">ID: {{ match_data.host_id }}</div>
             {% endif %}
